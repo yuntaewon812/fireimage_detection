@@ -1,0 +1,4 @@
+CUDA_VISIBLE_DEVICES=2 python generate_gradcam_only.py
+CUDA_VISIBLE_DEVICES=2 python generate_lime_only.py
+CUDA_VISIBLE_DEVICES=2 python generate_saliency_only.py
+CUDA_VISIBLE_DEVICES=2 python generate_shap_only.py
