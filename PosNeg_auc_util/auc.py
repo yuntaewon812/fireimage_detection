@@ -79,5 +79,5 @@ def perturbation_hit_curve(
     x = np.asarray(erase_ratios, dtype=np.float32)
     y = np.asarray(curves, dtype=np.float32)
     # 10%~90% 구간 사다리꼴 적분 AUC
-    auc_val = float(np.trapz(y, x))
+    auc_val = float(np.trapezoid(y, x) if hasattr(np, 'trapezoid') else np.trapz(y, x))
     return x, y, auc_val

@@ -70,8 +70,10 @@ def run_xai_pos_neg_auc_cv(
             X_test = X_tensor[test_index]
             y_test = y_tensor[test_index]
 
-            # 논문식 설정: 특정 클래스 샘플만 고르지 않고 테스트 전체를 평가
-            eval_local = np.arange(len(X_test))
+            # 최대 100개 샘플을 재현 가능하게 랜덤 선택
+            rng = np.random.default_rng(cfg.seed + i)
+            n_eval = min(100, len(X_test))
+            eval_local = rng.choice(len(X_test), n_eval, replace=False)
             if len(eval_local) == 0:
                 print(f"  Fold {i}: no test samples")
                 continue

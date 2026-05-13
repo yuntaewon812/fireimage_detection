@@ -71,7 +71,9 @@ def run_xai_drop_inc_cv(
 
             X_test = X_tensor[test_index]
             y_test = y_tensor[test_index]
-            eval_local = np.arange(len(X_test))
+            rng = np.random.default_rng(cfg.seed + i)
+            n_eval = min(100, len(X_test))
+            eval_local = rng.choice(len(X_test), n_eval, replace=False)
             if len(eval_local) == 0:
                 print(f"  Fold {i}: no test samples")
                 continue
