@@ -4,7 +4,13 @@ import torch
 def build_model(model_name: str, model_path: str, img_size: int, device):
     name = model_name.lower()
 
-    if "nextvit" in name:
+    if name == "resnet50":
+        from models.deep_model import DeepModel
+        model = DeepModel('ResNet50')
+    elif name == "densenet121":
+        from models.deep_model import DeepModel
+        model = DeepModel('DenseNet121')
+    elif "nextvit" in name:
         from models.nextvit import NextViTForImageClassification
         model = NextViTForImageClassification(
             num_labels=2,
@@ -44,6 +50,6 @@ def build_model(model_name: str, model_path: str, img_size: int, device):
         raise ValueError(f"Unknown model_name: {model_name}")
 
     state_dict = torch.load(model_path, map_location=device, weights_only=False)
-    model.load_state_dict(state_dict)
+    model.load_state_dict(state_dict, strict=False)
     model.to(device).eval()
     return model

@@ -5,3 +5,16 @@ results_shap/
 results_gradcam/
 results_lime/
 __pycache__/
+*.pyc
+.claude/
+logs/
+*.log
+install_log.txt
+shap_err.txt
+shap_log*.txt
+training_resume.log
+sensitivity_stability.log
+ablation_*.log
+eval_missing.log
+xai_run.log
+dropinc_auc*.log

@@ -7,6 +7,7 @@ from sklearn.model_selection import StratifiedKFold
 
 from pytorch_grad_cam.metrics.cam_mult_image import DropInConfidence, IncreaseInConfidence
 from pytorch_grad_cam.utils.model_targets import ClassifierOutputSoftmaxTarget
+from utils.utils import load_images_at_indices
 
 
 def _to_numpy_2d(exp_map):
@@ -48,8 +49,8 @@ def run_xai_drop_inc_cv(
     for class_name in cfg.class_names:
         print(f"=== Processing Class: {class_name} ===")
 
-        X_tensor, y_tensor = load_data_fn(class_name, img_size=(cfg.img_size, cfg.img_size), device="cpu")
-        if len(X_tensor) == 0:
+        all_paths, y_array = load_data_fn(class_name)
+        if len(all_paths) == 0:
             print("  No samples found.\n")
             continue
 
@@ -65,18 +66,24 @@ def run_xai_drop_inc_cv(
             for fold in cfg.folds
         }
 
-        for i, (_, test_index) in enumerate(skf.split(X_tensor, y_tensor)):
+        for i, (_, test_index) in enumerate(skf.split(all_paths, y_array)):
             if i not in cfg.folds:
                 continue
 
-            X_test = X_tensor[test_index]
-            y_test = y_tensor[test_index]
+            test_paths = [all_paths[j] for j in test_index]
+            y_test_all = y_array[test_index]
             rng = np.random.default_rng(cfg.seed + i)
-            n_eval = min(100, len(X_test))
-            eval_local = rng.choice(len(X_test), n_eval, replace=False)
+            n_eval = min(100, len(test_paths))
+            eval_local = rng.choice(len(test_paths), n_eval, replace=False)
             if len(eval_local) == 0:
                 print(f"  Fold {i}: no test samples")
                 continue
+
+            X_test, valid = load_images_at_indices(test_paths, eval_local, (cfg.img_size, cfg.img_size))
+            if len(valid) == 0:
+                print(f"  Fold {i}: no images loaded")
+                continue
+            y_test = torch.tensor(y_test_all[eval_local][valid], dtype=torch.long)
 
             model_path = os.path.join(cfg.base_model_path, class_name, f"fold{i}", f"{model_name}.pt")
             if not os.path.exists(model_path):
@@ -85,7 +92,7 @@ def run_xai_drop_inc_cv(
 
             model = model_loader(model_name, model_path, cfg.img_size, device)
 
-            for local_idx in tqdm(eval_local, desc=f"{class_name} fold{i}", leave=False):
+            for local_idx in tqdm(range(len(X_test)), desc=f"{class_name} fold{i}", leave=False):
                 x = X_test[local_idx].unsqueeze(0).to(device)
                 y_true = int(y_test[local_idx].item())
                 targets = [ClassifierOutputSoftmaxTarget(y_true)]
@@ -98,12 +105,9 @@ def run_xai_drop_inc_cv(
                         cam = _normalize_01(_to_numpy_2d(map_fn(model, x)))
                         cams = np.expand_dims(cam, axis=0)
 
-                        # raw_drop = max(0, Y - O)
                         raw_drop = float(drop_metric(x, cams, targets, model)[0])
-                        # inc_flag = 1 if O > Y else 0
                         inc_flag = float(inc_metric(x, cams, targets, model)[0])
 
-                        # Average Drop% 수식: max(0, Y-O) / Y * 100
                         drop_percent = 0.0
                         if base_prob > 1e-12:
                             drop_percent = (raw_drop / base_prob) * 100.0

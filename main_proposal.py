@@ -16,6 +16,8 @@ from models.convnextv2 import ConvNeXtV2ForImageClassification, ConvNeXtV2ForIma
 from models.efficientnetv2 import EfficientNetV2ForImageClassification, EfficientNetV2ForImageClassification_v2
 from models.gpt_vit import GPT2ForImageClassification
 from models.bert_vit import BertForImageClassification,BertForImageClassification_v2
+from models.maxvit import MaxViTForImageClassification, MaxViTForImageClassification_v2
+from models.internimage import InternImageForImageClassification, InternImageForImageClassification_v2
 
 import datetime
 from zoneinfo import ZoneInfo  
@@ -32,7 +34,7 @@ args = get_args()
 class_name = args.class_name
 print(f'now training for class: {class_name}')
 
-X, y = load_data(class_name)
+X, y = load_data(class_name, img_size=(160, 160))
 
 from sklearn.model_selection import StratifiedKFold
 
@@ -56,13 +58,15 @@ for i, (train_index, test_index) in enumerate(skf.split(X,y)):
     test_loader1 = DataLoader(test_dataset1, batch_size=8, shuffle=False)
 
     model_dicts = {
-        # 'mambavision_proposal': MambaVisionForImageClassification_v2(num_labels=2,img_size=224,patch_size=16,hidden_dim=512,model_variant='tiny'),
-        'efficientnetv2_proposal': EfficientNetV2ForImageClassification_v2(num_labels=2,img_size=224,patch_size=16,hidden_dim=512,model_variant='s'),
-        # 'mambavision': MambaVisionForImageClassification(num_labels=2,img_size=224,patch_size=16,hidden_dim=512,model_variant='tiny'),
-        'nextvit': NextViTForImageClassification(num_labels=2,img_size=224,patch_size=16,hidden_dim=512,model_variant='small'),
-        'efficientnetv2': EfficientNetV2ForImageClassification(num_labels=2,img_size=224,patch_size=16,hidden_dim=512,model_variant='s'),
-        'Resnet50': DeepModel('ResNet50'),
-        'DenseNet121': DeepModel('DenseNet121'),
+        # 'mambavision_proposal': MambaVisionForImageClassification_v2(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='tiny'),
+        # 'mambavision': MambaVisionForImageClassification(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='tiny'),
+        # 'maxvit': MaxViTForImageClassification(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='tiny'),
+        # 'internimage': InternImageForImageClassification(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='tiny'),
+        # 'Resnet50': DeepModel('ResNet50'),
+        # 'DenseNet121': DeepModel('DenseNet121'),
+        'efficientnetv2_proposal': EfficientNetV2ForImageClassification_v2(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='s'),
+        'nextvit': NextViTForImageClassification(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='small'),
+        'efficientnetv2': EfficientNetV2ForImageClassification(num_labels=2,img_size=160,patch_size=16,hidden_dim=512,model_variant='s'),
     }
     train_full_loop(train_loader1, val_loader1, test_loader1, model_dicts, class_name, i)
 

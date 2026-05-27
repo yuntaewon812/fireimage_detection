@@ -1,6 +1,6 @@
 import torch
 from pytorch_grad_cam import GradCAM
-from utils.utils import load_data
+from utils.utils import load_data_paths as load_data
 
 from PosNeg_auc_util.seed import set_seed
 from PosNeg_auc_util.config import AUCConfig
@@ -11,15 +11,15 @@ cfg = AUCConfig()
 set_seed(cfg.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-TOP2_MODELS = ["efficientnetv2", "nextvit"]
+TOP2_MODELS = ["Resnet50", "DenseNet121"]
 
 
 def get_cam_target_layers(model, model_name):
     name = model_name.lower()
-    if "efficient" in name:
-        return [model.backbone.blocks[-1]]
-    elif "nextvit" in name:
-        return [model.backbone.features[-1]]
+    if name == "resnet50":
+        return [model.feature_extractor[-1]]
+    elif name == "densenet121":
+        return [model.feature_extractor[-2]]
     last_conv = None
     for m in model.modules():
         if isinstance(m, torch.nn.Conv2d):

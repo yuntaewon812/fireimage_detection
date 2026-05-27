@@ -16,7 +16,7 @@ from utils.utils import get_args, load_data
 from utils.train_loop import evaluate_model
 
 SEED = 1004
-TOP2_MODELS = ["efficientnetv2", "nextvit"]
+TOP2_MODELS = ["Resnet50", "DenseNet121"]
 
 
 def setSeed(seed=SEED):
@@ -42,7 +42,7 @@ args = get_args()
 class_name = args.class_name
 print(f'class: {class_name}')
 
-X, y = load_data(class_name)
+X, y = load_data(class_name, img_size=(160, 160))
 
 skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=SEED)
 test_sets = []
@@ -58,7 +58,13 @@ X_test3, y_test3 = test_sets[2]
 
 def build_model(model_name):
     name = model_name.lower()
-    if "nextvit" in name:
+    if name == "resnet50":
+        from models.deep_model import DeepModel
+        return DeepModel('ResNet50')
+    elif name == "densenet121":
+        from models.deep_model import DeepModel
+        return DeepModel('DenseNet121')
+    elif "nextvit" in name:
         from models.nextvit import NextViTForImageClassification
         return NextViTForImageClassification(
             num_labels=2, img_size=224, patch_size=16, hidden_dim=512, model_variant='small')

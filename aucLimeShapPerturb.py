@@ -3,7 +3,7 @@ import torch
 from lime.lime_image import LimeImageExplainer
 import shap
 
-from utils.utils import load_data
+from utils.utils import load_data_paths as load_data
 
 from PosNeg_auc_util.seed import set_seed
 from PosNeg_auc_util.config import AUCConfig
@@ -14,7 +14,7 @@ cfg = AUCConfig()
 set_seed(cfg.seed)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-TOP2_MODELS = ["efficientnetv2", "nextvit"]
+TOP2_MODELS = ["Resnet50", "DenseNet121"]
 
 
 def get_lime_map(model, input_tensor):

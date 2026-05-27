@@ -11,43 +11,40 @@ from sklearn.metrics import confusion_matrix
 
 def get_args():
     parser = argparse.ArgumentParser(description='class 입력') 
-    parser.add_argument('--class_name', type=str, default='abnormal', help='클래스 이름을 입력하세요')
+    parser.add_argument('--class_name', type=str, default='fireimage', help='클래스 이름을 입력하세요')
     args = parser.parse_args()
     return args
 
 def load_data(class_name, img_size=(256, 256), device='cpu'):
     X, y = [], []
-    # 팁: 경로 구분자를 명확히 하기 위해 os.path.join 권장
     data_path = os.path.join('.', 'data', class_name)
 
-    # fireimage 클래스의 경우 하위 폴더가 'normal', 'fire'일 수 있으므로 유연하게 대처
-    target_subfolders = ['normal', 'abnormal', 'fire'] 
-    
-    for cls_name in target_subfolders:
-        cls_path = os.path.join(data_path, cls_name)
-        if not os.path.exists(cls_path):
+    # normal=0 (non-fire), abnormal=1 (fire)
+    # Each top-level folder contains class subfolders; walk recursively.
+    for top_folder, label in [('normal', 0), ('abnormal', 1)]:
+        top_path = os.path.join(data_path, top_folder)
+        if not os.path.exists(top_path):
             continue
-            
-        label = 0 if cls_name == 'normal' else 1
 
-        for file_name in os.listdir(cls_path):
-            image_path = os.path.join(cls_path, file_name)
-            
-            # [수정] 한글 경로 및 특수문자 포함 파일 로딩 문제 해결
-            try:
-                img_array = np.fromfile(image_path, np.uint8)
-                img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-                
-                if img is not None:
-                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                    img = cv2.resize(img, img_size)
-                    X.append(img)
-                    y.append(label)
-                else:
-                    print(f"경고: 파일을 읽을 수 없습니다 -> {image_path}")
-            except Exception as e:
-                print(f"에러 발생 ({file_name}): {e}")
- 
+        for root, _dirs, files in os.walk(top_path):
+            for file_name in files:
+                if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                    continue
+                image_path = os.path.join(root, file_name)
+                try:
+                    img_array = np.fromfile(image_path, np.uint8)
+                    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
+                    if img is not None:
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                        img = cv2.resize(img, img_size)
+                        X.append(img)
+                        y.append(label)
+                    else:
+                        print(f"경고: 파일을 읽을 수 없습니다 -> {image_path}")
+                except Exception as e:
+                    print(f"에러 발생 ({file_name}): {e}")
+
     if not X:
         raise ValueError(f"데이터를 찾을 수 없습니다. 경로를 확인하세요: {data_path}")
 
@@ -60,6 +57,103 @@ def load_data(class_name, img_size=(256, 256), device='cpu'):
     y_tensor = torch.tensor(y, dtype=torch.long, device=device)
 
     return X_tensor, y_tensor
+
+
+def load_data_with_groups(class_name, img_size=(160, 160), device='cpu'):
+    """
+    load_data와 동일하지만 영상 소스(group)를 함께 반환.
+    YouTube 프레임은 video_id를 group으로, 나머지는 개별 고유 ID를 group으로 할당.
+    StratifiedGroupKFold 사용 시 같은 영상의 프레임이 train/test에 섞이지 않도록 함.
+
+    Returns:
+        X_tensor, y_tensor, groups (np.ndarray of str)
+    """
+    import re
+    X, y, groups = [], [], []
+    data_path = os.path.join('.', 'data', class_name)
+    other_counter = 0
+
+    for top_folder, label in [('normal', 0), ('abnormal', 1)]:
+        top_path = os.path.join(data_path, top_folder)
+        if not os.path.exists(top_path):
+            continue
+        for root, _dirs, files in os.walk(top_path):
+            for file_name in files:
+                if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                    continue
+                image_path = os.path.join(root, file_name)
+                try:
+                    img_array = np.fromfile(image_path, np.uint8)
+                    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+                    if img is not None:
+                        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                        img = cv2.resize(img, img_size)
+                        X.append(img)
+                        y.append(label)
+                        # YouTube 프레임: video_id를 공유 그룹으로 묶음
+                        # 그 외: 샘플마다 고유 그룹 (일반 StratifiedKFold와 동일 효과)
+                        if 'youtube' in root.lower():
+                            m = re.match(r'^(.+?)_f\d+\.(jpg|jpeg|png|bmp)$',
+                                         file_name, re.IGNORECASE)
+                            group_id = m.group(1) if m else f'yt_{file_name}'
+                        else:
+                            group_id = f'other_{other_counter}'
+                            other_counter += 1
+                        groups.append(group_id)
+                    else:
+                        print(f"경고: 읽기 실패 -> {image_path}")
+                except Exception as e:
+                    print(f"에러 ({file_name}): {e}")
+
+    if not X:
+        raise ValueError(f"데이터 없음: {data_path}")
+
+    X = np.array(X, dtype=np.float32) / 255.0
+    y = np.array(y, dtype=np.int64)
+    X = np.transpose(X, (0, 3, 1, 2))
+
+    X_tensor = torch.tensor(X, dtype=torch.float32, device=device)
+    y_tensor = torch.tensor(y, dtype=torch.long, device=device)
+    return X_tensor, y_tensor, np.array(groups)
+
+
+def load_data_paths(class_name, img_size=None, device=None):
+    """Return (paths_list, labels_array) without loading images — avoids OOM on large datasets."""
+    paths, labels = [], []
+    data_path = os.path.join('.', 'data', class_name)
+    for top_folder, label in [('normal', 0), ('abnormal', 1)]:
+        top_path = os.path.join(data_path, top_folder)
+        if not os.path.exists(top_path):
+            continue
+        for root, _dirs, files in os.walk(top_path):
+            for file_name in files:
+                if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                    continue
+                paths.append(os.path.join(root, file_name))
+                labels.append(label)
+    return paths, np.array(labels, dtype=np.int64)
+
+
+def load_images_at_indices(paths, indices, img_size=(224, 224)):
+    """Load only images at the given index positions. Returns (X_tensor, valid_positions)."""
+    X, valid = [], []
+    for pos, idx in enumerate(indices):
+        try:
+            arr = np.fromfile(paths[idx], np.uint8)
+            img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+            if img is not None:
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                img = cv2.resize(img, img_size)
+                X.append(img)
+                valid.append(pos)
+        except Exception:
+            continue
+    if not X:
+        return torch.zeros(0), []
+    arr = np.array(X, dtype=np.float32) / 255.0
+    arr = np.transpose(arr, (0, 3, 1, 2))
+    return torch.tensor(arr, dtype=torch.float32), valid
+
 
 def save_csv(model_name, acc, loss, recall, prec, f1, auc_val, class_name, time_val) : 
     # 결과 포맷팅 (평균, 최소, 최대)
@@ -83,13 +177,13 @@ def save_csv(model_name, acc, loss, recall, prec, f1, auc_val, class_name, time_
     if not os.path.exists(csv_filename):
         df = pd.DataFrame([new_row], columns=header)
     else:
-        df = pd.read_csv(csv_filename)
+        df = pd.read_csv(csv_filename, encoding='utf-8-sig')
         if model_name in df['model name'].values:
             df.loc[df['model name'] == model_name, header[1:]] = new_row[1:]
         else:
             df = pd.concat([df, pd.DataFrame([new_row], columns=header)], ignore_index=True)
-    
-    df.to_csv(csv_filename, index=False, header=True) 
+
+    df.to_csv(csv_filename, index=False, header=True, encoding='utf-8') 
 
 def plot_confusion_matrix(y_test, y_pred, model_name, class_name, fold_num) :
     if y_pred.ndim > 1 and y_pred.shape[1] > 1:

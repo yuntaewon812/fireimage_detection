@@ -1,13 +1,43 @@
 import os
 import numpy as np
 import torch
-import torch.nn as nn 
+import torch.nn as nn
 from sklearn.metrics import balanced_accuracy_score, recall_score, precision_score, f1_score, roc_auc_score
 
 import datetime
 from zoneinfo import ZoneInfo
 
 from utils.utils import save_csv, plot_confusion_matrix, roc_plot
+
+
+# =========================
+# ECE (Expected Calibration Error)
+# =========================
+def compute_ece(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -> float:
+    """
+    모델 신뢰도(confidence)와 실제 정확도(accuracy)의 불일치를 측정.
+    0에 가까울수록 잘 보정된 모델. 일반적으로 0.05 이하면 양호.
+
+    Args:
+        y_true: 실제 레이블 (0 or 1)
+        y_prob: 클래스 1(화재)에 대한 예측 확률
+        n_bins: 신뢰도 구간 개수
+    Returns:
+        ECE 값 [0, 1]
+    """
+    bin_edges = np.linspace(0.0, 1.0, n_bins + 1)
+    ece = 0.0
+    n = len(y_true)
+    for i in range(n_bins):
+        lo, hi = bin_edges[i], bin_edges[i + 1]
+        mask = (y_prob >= lo) & (y_prob < hi)
+        n_in_bin = mask.sum()
+        if n_in_bin == 0:
+            continue
+        acc_in_bin = float((y_true[mask] == 1).mean())
+        conf_in_bin = float(y_prob[mask].mean())
+        ece += abs(acc_in_bin - conf_in_bin) * (n_in_bin / n)
+    return ece
 
 # =========================
 # 1️⃣ 한 epoch 학습
@@ -105,9 +135,17 @@ def bootstrap_ci_loss(values, n_bootstrap=1000, alpha=0.95):
 # 4️⃣ 전체 학습/평가 루프
 # =========================
 def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_name, fold_num,
-                    lr=1e-3, epochs=50, patience=10, device='cuda'):
+                    lr=1e-3, epochs=50, patience=10, device='cuda',
+                    per_model_lr: dict = None,
+                    force_retrain: set = None,
+                    use_scheduler: set = None):
 
     device = torch.device(device if torch.cuda.is_available() else 'cpu')
+    per_model_lr   = per_model_lr  or {}
+    force_retrain  = force_retrain or set()
+    # 기본 스케줄러 적용 대상: 대형 transformer 계열
+    default_scheduler_models = {'internimage', 'maxvit', 'nextvit', 'swintransformerv2', 'convnextv2'}
+    use_scheduler = use_scheduler if use_scheduler is not None else default_scheduler_models
 
     for model_name, model in model_dicts.items():
         print(f"\n=== Training {model_name} on Fold {fold_num} ===")
@@ -115,19 +153,35 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
         save_path = f'./model_save/{class_name}/fold{fold_num}/{model_name}.pt'
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
 
+        # force_retrain 대상이면 기존 가중치 삭제 후 재학습
+        if model_name in force_retrain and os.path.exists(save_path):
+            os.remove(save_path)
+            print(f"  [force_retrain] 기존 가중치 삭제 → 재학습")
+
         model.to(device)
         criterion = nn.CrossEntropyLoss()
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+        # 모델별 학습률 (per_model_lr 우선, 없으면 lr 기본값)
+        model_lr = per_model_lr.get(model_name, lr)
+        optimizer = torch.optim.Adam(model.parameters(), lr=model_lr, weight_decay=1e-4)
+        print(f"  lr={model_lr:.1e}  weight_decay=1e-4")
+
+        # Cosine Annealing 스케줄러 (대형 transformer 계열에 적용)
+        scheduler = None
+        if model_name in use_scheduler:
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=epochs, eta_min=model_lr * 0.01)
+            print(f"  CosineAnnealingLR 적용 (T_max={epochs})")
 
         best_val_acc = 0
         patience_counter = 0
-        
+
         try:
             model.load_state_dict(torch.load(save_path, map_location=device, weights_only=True))
-            print(f"Loaded existing model for {model_name}")
+            print(f"  기존 가중치 로드 완료 → 평가만 수행")
             training_needed = False
         except Exception as e:
-            print(f"No saved model found, training from scratch: {e}")
+            print(f"  저장된 가중치 없음 → 처음부터 학습: {e}")
             training_needed = True
 
         best_val_acc = 0
@@ -140,6 +194,9 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
             for epoch in range(epochs):
                 train_loss, train_acc = train_one_epoch(model, train_loader, optimizer, criterion, device)
                 val_loss, val_acc, _, _, _, _ = evaluate_model(model, val_loader, criterion, device)
+
+                if scheduler is not None:
+                    scheduler.step()
 
                 print(f"Epoch [{epoch+1}/{epochs}] | Train Loss: {train_loss:.4f}, Acc: {train_acc:.4f} | "
                       f"Val Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
@@ -175,12 +232,18 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
             print(f"ROC AUC calculation failed: {e}")
             test_auc_ci = [np.nan, np.nan, np.nan]
 
+        # ECE (보정 오차) — CSV에는 저장하지 않고 콘솔 출력
+        ece = compute_ece(y_true, y_prob)
+        ece_status = "양호" if ece <= 0.05 else ("주의" if ece <= 0.10 else "불량")
+        print(f"  ECE: {ece:.4f}  [{ece_status}]  "
+              f"(0.05 이하=양호 / F1={test_f1_ci[0]:.3f} / Loss={test_loss_ci[0]:.3f})")
+
         # -----------------------------
         # 결과 저장
         # -----------------------------
         now = datetime.datetime.now(ZoneInfo("Asia/Seoul"))
-        save_csv(f'{model_name}_{fold_num}', test_acc_ci, test_loss_ci, test_recall_ci, 
+        save_csv(f'{model_name}_{fold_num}', test_acc_ci, test_loss_ci, test_recall_ci,
                  test_prec_ci, test_f1_ci, test_auc_ci, class_name, now)
- 
+
         plot_confusion_matrix(y_true, y_pred, model_name, class_name, fold_num)
         #roc_plot(y_true, y_prob, model_name, class_name, fold_num)
