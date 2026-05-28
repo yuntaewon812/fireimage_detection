@@ -8,10 +8,10 @@ import matplotlib.patches as mpatches
 METRICS_CSV = './results/fireimage/metrics.csv'
 OUT_DIR = './results/fireimage'
 
-METRIC_COLS = ['Accuracy', 'Loss', 'Recall', 'Precision', 'F1 score', 'AUROC']
-# Higher is better for all except Loss
+METRIC_COLS = ['Accuracy', 'Loss', 'Recall', 'Precision', 'F1 score', 'AUROC', 'ECE']
+# Higher is better for all except Loss and ECE
 HIGHER_IS_BETTER = {'Accuracy': True, 'Loss': False, 'Recall': True,
-                    'Precision': True, 'F1 score': True, 'AUROC': True}
+                    'Precision': True, 'F1 score': True, 'AUROC': True, 'ECE': False}
 
 PRIMARY_METRIC = 'F1 score'   # 최종 순위 기준 지표
 
@@ -36,6 +36,10 @@ def extract_model_name(row_name: str) -> str:
 def load_metrics(csv_path: str) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
     df['model'] = df['model name'].apply(extract_model_name)
+
+    # ECE가 없는 기존 CSV와의 하위 호환
+    if 'ECE' not in df.columns:
+        df['ECE'] = np.nan
 
     for col in METRIC_COLS:
         df[[f'{col}_mean', f'{col}_lower', f'{col}_upper']] = df[col].apply(
@@ -67,21 +71,24 @@ def rank_models(agg: pd.DataFrame) -> pd.DataFrame:
 
 
 def print_summary(ranked: pd.DataFrame):
-    print('\n' + '=' * 70)
+    print('\n' + '=' * 80)
     print(f'  Model Comparison  (기준 지표: {PRIMARY_METRIC})')
-    print('=' * 70)
-    header = f"{'Rank':<5} {'Model':<30} {'Acc':>7} {'F1':>7} {'AUROC':>7} {'Loss':>7}"
+    print('=' * 80)
+    header = f"{'Rank':<5} {'Model':<30} {'Acc':>7} {'F1':>7} {'AUROC':>7} {'Loss':>7} {'ECE':>7}"
     print(header)
-    print('-' * 70)
+    print('-' * 80)
     for _, row in ranked.iterrows():
         marker = '  ** TOP' if row['rank'] <= 2 else ''
+        ece_val = row.get('ECE_mean', np.nan)
+        ece_str = f'{ece_val:>7.4f}' if not np.isnan(ece_val) else '    N/A'
         print(f"{int(row['rank']):<5} {row['model']:<30} "
               f"{row['Accuracy_mean']:>7.4f} "
               f"{row['F1 score_mean']:>7.4f} "
               f"{row['AUROC_mean']:>7.4f} "
-              f"{row['Loss_mean']:>7.4f}"
+              f"{row['Loss_mean']:>7.4f} "
+              f"{ece_str}"
               f"{marker}")
-    print('=' * 70)
+    print('=' * 80)
 
     top2 = ranked[ranked['rank'] <= 2]['model'].tolist()
     print(f'\n  [TOP2] {top2[0]}, {top2[1]}')

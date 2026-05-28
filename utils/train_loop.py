@@ -232,7 +232,7 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
             print(f"ROC AUC calculation failed: {e}")
             test_auc_ci = [np.nan, np.nan, np.nan]
 
-        # ECE (보정 오차) — CSV에는 저장하지 않고 콘솔 출력
+        # ECE (보정 오차)
         ece = compute_ece(y_true, y_prob)
         ece_status = "양호" if ece <= 0.05 else ("주의" if ece <= 0.10 else "불량")
         print(f"  ECE: {ece:.4f}  [{ece_status}]  "
@@ -243,7 +243,7 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
         # -----------------------------
         now = datetime.datetime.now(ZoneInfo("Asia/Seoul"))
         save_csv(f'{model_name}_{fold_num}', test_acc_ci, test_loss_ci, test_recall_ci,
-                 test_prec_ci, test_f1_ci, test_auc_ci, class_name, now)
+                 test_prec_ci, test_f1_ci, test_auc_ci, class_name, now, ece=ece)
 
         plot_confusion_matrix(y_true, y_pred, model_name, class_name, fold_num)
         #roc_plot(y_true, y_prob, model_name, class_name, fold_num)

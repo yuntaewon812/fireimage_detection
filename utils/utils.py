@@ -155,35 +155,40 @@ def load_images_at_indices(paths, indices, img_size=(224, 224)):
     return torch.tensor(arr, dtype=torch.float32), valid
 
 
-def save_csv(model_name, acc, loss, recall, prec, f1, auc_val, class_name, time_val) : 
-    # 결과 포맷팅 (평균, 최소, 최대)
-    acc_str = f'{acc[0]:.3f}({acc[1]:.3f}-{acc[2]:.3f})'
-    loss_str = f'{loss[0]:.3f}({loss[1]:.3f}-{loss[2]:.3f})'
+def save_csv(model_name, acc, loss, recall, prec, f1, auc_val, class_name, time_val, ece=None):
+    acc_str    = f'{acc[0]:.3f}({acc[1]:.3f}-{acc[2]:.3f})'
+    loss_str   = f'{loss[0]:.3f}({loss[1]:.3f}-{loss[2]:.3f})'
     recall_str = f'{recall[0]:.3f}({recall[1]:.3f}-{recall[2]:.3f})'
-    prec_str = f'{prec[0]:.3f}({prec[1]:.3f}-{prec[2]:.3f})'
-    f1_str = f'{f1[0]:.3f}({f1[1]:.3f}-{f1[2]:.3f})'
-    
-    auc_str = f'{auc_val[0]:.3f}({auc_val[1]:.3f}-{auc_val[2]:.3f})' if auc_val is not None else 'Nan(Nan-Nan)'
-    time_str = time_val.strftime("%Y-%m-%d %H:%M:%S")
+    prec_str   = f'{prec[0]:.3f}({prec[1]:.3f}-{prec[2]:.3f})'
+    f1_str     = f'{f1[0]:.3f}({f1[1]:.3f}-{f1[2]:.3f})'
+    auc_str    = f'{auc_val[0]:.3f}({auc_val[1]:.3f}-{auc_val[2]:.3f})' if auc_val is not None else 'Nan(Nan-Nan)'
+    ece_str    = f'{ece:.4f}' if ece is not None else ''
+    time_str   = time_val.strftime("%Y-%m-%d %H:%M:%S")
 
     output_dir = os.path.join('.', 'results', class_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    header = ['model name', 'Accuracy', 'Loss', 'Recall', 'Precision', 'F1 score', 'AUROC', 'timestamp']
-    new_row = [model_name, acc_str, loss_str, recall_str, prec_str, f1_str, auc_str, time_str]
+    header  = ['model name', 'Accuracy', 'Loss', 'Recall', 'Precision', 'F1 score', 'AUROC', 'ECE', 'timestamp']
+    new_row = [model_name, acc_str, loss_str, recall_str, prec_str, f1_str, auc_str, ece_str, time_str]
 
     csv_filename = os.path.join(output_dir, 'metrics.csv')
 
     if not os.path.exists(csv_filename):
         df = pd.DataFrame([new_row], columns=header)
     else:
-        df = pd.read_csv(csv_filename, encoding='utf-8-sig')
+        df = pd.read_csv(csv_filename, encoding='utf-8-sig', dtype=str)
+        # 기존 파일에 ECE 컬럼이 없으면 빈 값으로 추가
+        if 'ECE' not in df.columns:
+            ts_idx = df.columns.get_loc('timestamp')
+            df.insert(ts_idx, 'ECE', '')
         if model_name in df['model name'].values:
-            df.loc[df['model name'] == model_name, header[1:]] = new_row[1:]
+            idx = df[df['model name'] == model_name].index[0]
+            for col, val in zip(header[1:], new_row[1:]):
+                df.at[idx, col] = str(val)
         else:
             df = pd.concat([df, pd.DataFrame([new_row], columns=header)], ignore_index=True)
 
-    df.to_csv(csv_filename, index=False, header=True, encoding='utf-8') 
+    df.to_csv(csv_filename, index=False, header=True, encoding='utf-8')
 
 def plot_confusion_matrix(y_test, y_pred, model_name, class_name, fold_num) :
     if y_pred.ndim > 1 and y_pred.shape[1] > 1:

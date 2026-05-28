@@ -141,5 +141,19 @@ for fold_idx, (train_index, test_index) in enumerate(sgkf.split(X, y, groups)):
         force_retrain=FORCE_RETRAIN,
     )
 
-print('\n[3/3] 학습 완료. compare_models.py 로 결과 확인:')
-print('  python compare_models.py')
+print('\n[3/3] 학습 완료.')
+print('  내부 결과 비교: python compare_models.py')
+
+# ─────────────────────────────────────────────────────
+# 외부 검증셋 평가 (데이터가 있을 때만 자동 실행)
+# ─────────────────────────────────────────────────────
+ext_data_path = os.path.join('.', 'data', 'external_val', class_name)
+if os.path.exists(ext_data_path):
+    print(f'\n[4/3] 외부 검증셋 발견 → 평가 시작...')
+    import subprocess, sys
+    subprocess.run([sys.executable, 'evaluate_external.py', '--class_name', class_name])
+else:
+    print(f'\n[참고] 외부 검증셋을 추가하면 자동으로 평가됩니다:')
+    print(f'  {ext_data_path}/normal/')
+    print(f'  {ext_data_path}/abnormal/')
+    print(f'  준비 후: python evaluate_external.py --class_name {class_name}')
