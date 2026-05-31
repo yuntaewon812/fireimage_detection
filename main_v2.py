@@ -45,6 +45,9 @@ from models.internimage import InternImageForImageClassification
 
 os.makedirs('./model_save', exist_ok=True)
 
+torch.set_num_threads(8)       # Intel Core Ultra 7 258V 8코어 풀 활용
+torch.set_num_interop_threads(4)
+
 now = datetime.datetime.now(ZoneInfo("Asia/Seoul"))
 print('=' * 50)
 print(f'  main_v2.py 시작: {now.strftime("%Y-%m-%d %H:%M:%S")}')
@@ -80,8 +83,10 @@ PER_MODEL_LR = {
     'internimage':            5e-5,   # DCNv3 — 매우 낮은 LR 필요
 }
 
-# fold0 완료 모델 가중치 유지, 나머지만 학습
-FORCE_RETRAIN = set()
+# Kaggle GPU 환경: 전체 재학습 (CPU fold0 불량 가중치 무시)
+# 로컬 이어하기 시: set() 로 되돌릴 것
+FORCE_RETRAIN = {'Resnet50', 'DenseNet121', 'efficientnetv2', 'efficientnetv2_proposal',
+                 'nextvit', 'maxvit', 'internimage'}
 
 # ─────────────────────────────────────────────────────
 # StratifiedGroupKFold — 3-fold

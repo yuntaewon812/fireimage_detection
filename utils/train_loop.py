@@ -140,7 +140,18 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
                     force_retrain: set = None,
                     use_scheduler: set = None):
 
-    device = torch.device(device if torch.cuda.is_available() else 'cpu')
+    try:
+        import intel_extension_for_pytorch as ipex  # noqa: F401
+        _xpu = torch.xpu.is_available()
+    except ImportError:
+        _xpu = False
+    if _xpu:
+        device = torch.device('xpu')
+    elif torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = torch.device('cpu')
+    print(f"  device: {device}")
     per_model_lr   = per_model_lr  or {}
     force_retrain  = force_retrain or set()
     # 기본 스케줄러 적용 대상: 대형 transformer 계열
