@@ -80,8 +80,8 @@ PER_MODEL_LR = {
     'internimage':            5e-5,   # DCNv3 — 매우 낮은 LR 필요
 }
 
-# internimage 와 maxvit 은 기존 불량 가중치를 삭제하고 재학습
-FORCE_RETRAIN = {'internimage', 'maxvit'}
+# fold0 완료 모델 가중치 유지, 나머지만 학습
+FORCE_RETRAIN = set()
 
 # ─────────────────────────────────────────────────────
 # StratifiedGroupKFold — 3-fold
@@ -135,8 +135,8 @@ for fold_idx, (train_index, test_index) in enumerate(sgkf.split(X, y, groups)):
         train_loader, val_loader, test_loader,
         model_dicts, class_name, fold_idx,
         lr=3e-4,
-        epochs=60,
-        patience=12,
+        epochs=30,
+        patience=8,
         per_model_lr=PER_MODEL_LR,
         force_retrain=FORCE_RETRAIN,
     )
