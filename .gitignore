@@ -21,3 +21,21 @@ dropinc_auc*.log
 training_log.txt
 training_stdout.txt
 training_stderr.txt
+
+# Kaggle 배포/패치 임시 스크립트·산출물 (재현 불필요)
+patch_*.py
+build_test_kernel.py
+fix_test_mount.py
+update_b64.py
+check_bom.py
+download_data.py
+cell1_new.txt
+code_b64.txt
+download_log.txt
+*.zip
+*_temp/
+kaggle_output/
+test_output/
+.gradio/
+valid_models_backup/
+demo/test_output/

@@ -1,0 +1,7 @@
+# 데모 추가 의존성 (프로젝트 본체 requirements.txt 위에 설치)
+gradio>=4.0
+folium>=0.15
+opencv-python>=4.8
+pillow>=10.0
+# VLM 백엔드(선택): Claude 비전 사용 시
+anthropic>=0.40
