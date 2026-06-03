@@ -66,9 +66,16 @@ X, y, groups = load_data_with_groups(class_name, img_size=(160, 160))
 import numpy as np
 unique_groups = np.unique(groups)
 youtube_groups = [g for g in unique_groups if not g.startswith('other_')]
-print(f'  총 샘플: {len(X):,}  |  클래스 분포: normal={int((y==0).sum()):,} / abnormal={int((y==1).sum()):,}')
+n_normal   = int((y==0).sum())
+n_abnormal = int((y==1).sum())
+print(f'  총 샘플: {len(X):,}  |  클래스 분포: normal={n_normal:,} / abnormal={n_abnormal:,}')
 print(f'  YouTube 영상 소스: {len(youtube_groups)}개 {youtube_groups}')
 print(f'  그룹 수: {len(unique_groups):,}  (YouTube 프레임은 같은 그룹으로 묶임)')
+
+# 데이터 검증 — 두 클래스 모두 있어야 학습 가능
+assert n_normal   > 0, f'[치명적] normal 데이터 없음: data/{class_name}/normal/ 경로 확인'
+assert n_abnormal > 0, f'[치명적] abnormal 데이터 없음(0장): data/{class_name}/abnormal/ 경로 확인. followlinks=True 적용됐는지 확인'
+print(f'  데이터 검증 통과 ✓')
 
 # ─────────────────────────────────────────────────────
 # 모델별 학습률 설정

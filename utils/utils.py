@@ -26,7 +26,7 @@ def load_data(class_name, img_size=(256, 256), device='cpu'):
         if not os.path.exists(top_path):
             continue
 
-        for root, _dirs, files in os.walk(top_path):
+        for root, _dirs, files in os.walk(top_path, followlinks=True):
             for file_name in files:
                 if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
                     continue
@@ -77,7 +77,7 @@ def load_data_with_groups(class_name, img_size=(160, 160), device='cpu'):
         top_path = os.path.join(data_path, top_folder)
         if not os.path.exists(top_path):
             continue
-        for root, _dirs, files in os.walk(top_path):
+        for root, _dirs, files in os.walk(top_path, followlinks=True):
             for file_name in files:
                 if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
                     continue
@@ -125,7 +125,7 @@ def load_data_paths(class_name, img_size=None, device=None):
         top_path = os.path.join(data_path, top_folder)
         if not os.path.exists(top_path):
             continue
-        for root, _dirs, files in os.walk(top_path):
+        for root, _dirs, files in os.walk(top_path, followlinks=True):
             for file_name in files:
                 if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
                     continue

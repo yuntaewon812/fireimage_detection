@@ -149,6 +149,8 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
         device = torch.device('xpu')
     elif torch.cuda.is_available():
         device = torch.device('cuda')
+        cap = torch.cuda.get_device_capability()
+        print(f"  GPU: {torch.cuda.get_device_name(0)} (sm_{cap[0]}{cap[1]})")
     else:
         device = torch.device('cpu')
     print(f"  device: {device}")
@@ -209,8 +211,15 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
                 if scheduler is not None:
                     scheduler.step()
 
-                print(f"Epoch [{epoch+1}/{epochs}] | Train Loss: {train_loss:.4f}, Acc: {train_acc:.4f} | "
-                      f"Val Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
+                log_line = (f"Epoch [{epoch+1}/{epochs}] | Train Loss: {train_loss:.4f}, Acc: {train_acc:.4f} | "
+                            f"Val Loss: {val_loss:.4f}, Acc: {val_acc:.4f}")
+                print(log_line)
+
+                try:
+                    with open('./training_progress.txt', 'a', encoding='utf-8') as pf:
+                        pf.write(f"[{model_name} fold{fold_num}] {log_line}\n")
+                except Exception:
+                    pass
 
                 # Early stopping
                 if val_acc > best_val_acc:
