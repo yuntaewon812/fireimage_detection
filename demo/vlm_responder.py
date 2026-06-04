@@ -186,9 +186,14 @@ class WildfireResponder:
 
     def respond(self, image_rgb, result, wind_direction=None,
                 location: str | None = None, night: bool = False) -> dict:
-        smoke = analyze_smoke_color(image_rgb,
-                                    result.fire_mask if result.fire_mask is not None
-                                    else np.ones(image_rgb.shape[:2], np.float32))
+        h, w = image_rgb.shape[:2]
+        if result.fire_mask is not None:
+            import cv2 as _cv2
+            mask_resized = _cv2.resize(result.fire_mask, (w, h),
+                                       interpolation=_cv2.INTER_LINEAR)
+        else:
+            mask_resized = np.ones((h, w), np.float32)
+        smoke = analyze_smoke_color(image_rgb, mask_resized)
         intensity = estimate_intensity(result)
         resources = recommend_resources(intensity["grade"], night=night)
         grounding = _build_grounding(result, smoke, intensity, resources,
