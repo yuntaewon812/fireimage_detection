@@ -117,6 +117,66 @@ def load_data_with_groups(class_name, img_size=(160, 160), device='cpu'):
     return X_tensor, y_tensor, np.array(groups)
 
 
+def load_data_distribute(class_name, img_size=(160, 160), device='cpu',
+                         target_per_video=400):
+    """
+    distributed 분할용 로더 (fold3 실험).
+    YouTube 프레임을 영상별로 듬성 샘플링(중복 제거)한 뒤, 모든 샘플을 독립적으로 반환.
+    → StratifiedKFold(shuffle=True)로 train/test에 무작위 분산하기 위함.
+      (load_data_with_groups 처럼 영상을 한 fold에 묶지 않음)
+
+    target_per_video: 영상당 목표 프레임 수 (초과 시 등간격 솎기로 중복 제거)
+    Returns: X_tensor, y_tensor   (groups 불필요 — 일반 StratifiedKFold 사용)
+    """
+    import re
+    from collections import defaultdict
+
+    data_path = os.path.join('.', 'data', class_name)
+    yt = defaultdict(list)   # video_id -> [(framenum, path, label)]
+    other = []               # [(path, label)]
+
+    for top_folder, label in [('normal', 0), ('abnormal', 1)]:
+        top_path = os.path.join(data_path, top_folder)
+        if not os.path.exists(top_path):
+            continue
+        for root, _dirs, files in os.walk(top_path, followlinks=True):
+            for fn in files:
+                if not fn.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')):
+                    continue
+                fp = os.path.join(root, fn)
+                if 'youtube' in root.lower():
+                    m = re.match(r'^(.+?)_f(\d+)\.', fn, re.IGNORECASE)
+                    vid = m.group(1) if m else fn
+                    num = int(m.group(2)) if m else 0
+                    yt[vid].append((num, fp, label))
+                else:
+                    other.append((fp, label))
+
+    # 영상별 등간격 솎기 (중복 제거)
+    kept = list(other)
+    for vid, lst in yt.items():
+        lst.sort()
+        stride = max(1, len(lst) // target_per_video)
+        for i in range(0, len(lst), stride):
+            kept.append((lst[i][1], lst[i][2]))
+        print(f"  [{vid}] {len(lst)}장 → {len(range(0, len(lst), stride))}장 (stride {stride})")
+
+    X, y = [], []
+    for fp, label in kept:
+        arr = np.fromfile(fp, np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            continue
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = cv2.resize(img, img_size)
+        X.append(img); y.append(label)
+
+    X = np.transpose(np.array(X, dtype=np.float32) / 255.0, (0, 3, 1, 2))
+    X_tensor = torch.tensor(X, dtype=torch.float32, device=device)
+    y_tensor = torch.tensor(np.array(y, dtype=np.int64), dtype=torch.long, device=device)
+    return X_tensor, y_tensor
+
+
 def load_data_paths(class_name, img_size=None, device=None):
     """Return (paths_list, labels_array) without loading images — avoids OOM on large datasets."""
     paths, labels = [], []

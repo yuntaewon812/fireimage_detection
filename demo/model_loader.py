@@ -59,11 +59,11 @@ AVAILABLE_MODELS = list(MODEL_BUILDERS.keys())
 
 # ──────────────────────────────────────────────────────────────
 # 데모에 노출할 상위 모델 (성능평가 결과로 결정)
-# 학습 완료 후 results/fireimage/metrics.csv 의 F1/AUROC 순위를 보고
-# 아래 2개를 실제 상위 모델로 교체할 것.
-# (현재 잠정값: fold0 유효결과 기준 DenseNet121 F1=0.985, Resnet50 F1=0.983)
+# v25 GPU 재학습 분포내(fold0+fold2) 성능평가 결과로 선정:
+#   1위 maxvit         F1 1.000 / Loss 0.000
+#   2위 efficientnetv2 F1 0.998 / Loss 0.002 (internimage는 동급이나 DCNv3로 추론 느려 제외)
 # ──────────────────────────────────────────────────────────────
-TOP_MODELS = ["DenseNet121", "Resnet50"]
+TOP_MODELS = ["maxvit", "efficientnetv2"]
 
 
 def rank_top_models(k: int = 2) -> list[str]:
