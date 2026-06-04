@@ -90,10 +90,9 @@ PER_MODEL_LR = {
     'internimage':            5e-5,   # DCNv3 — 매우 낮은 LR 필요
 }
 
-# Kaggle GPU 환경: 전체 재학습 (CPU fold0 불량 가중치 무시)
-# 로컬 이어하기 시: set() 로 되돌릴 것
-FORCE_RETRAIN = {'Resnet50', 'DenseNet121', 'efficientnetv2', 'efficientnetv2_proposal',
-                 'nextvit', 'maxvit', 'internimage'}
+# 이어학습(resume): 기존 가중치 있으면 평가만, 없는 것만 신규 학습
+# (internimage fold2 등 미완 모델만 채우기 위해 빈 셋)
+FORCE_RETRAIN = set()
 
 # ─────────────────────────────────────────────────────
 # StratifiedGroupKFold — 3-fold

@@ -10,5 +10,5 @@
   "enable_internet": true,
   "dataset_sources": ["yuntarwon/fireimage-abnormal", "yuntarwon/fireimage-abnormal-youtube", "yuntarwon/fireimage-normal", "yuntarwon/fireimage-code"],
   "competition_sources": [],
-  "kernel_sources": []
+  "kernel_sources": ["yuntarwon/fireimage-training"]
 }
