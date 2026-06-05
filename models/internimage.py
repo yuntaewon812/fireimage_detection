@@ -212,29 +212,43 @@ from models.module import SAFEModule
 
 class InternImageForImageClassification(nn.Module):
     def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512,
-                 model_variant='tiny'):
+                 model_variant='tiny', pretrained=False):
         super().__init__()
-        configs = {
-            'tiny':  dict(base_channels=64,  depths=(4, 4, 18, 4),
-                          groups=(4, 8, 16, 32), drop_path_rate=0.2),
-            'small': dict(base_channels=80,  depths=(4, 4, 21, 4),
-                          groups=(5, 10, 20, 40), drop_path_rate=0.3),
-            'base':  dict(base_channels=112, depths=(4, 4, 21, 4),
-                          groups=(7, 14, 28, 56), drop_path_rate=0.4),
-        }
-        cfg = configs.get(model_variant, configs['tiny'])
-        self.backbone = InternImage(**cfg)
-        num_features = self.backbone.num_features
+        self.pretrained = pretrained
+
+        if pretrained:
+            # InternImage 공식 pretrained 미제공(timm 없음) →
+            # 동급 규모(Swin-Tiny, ImageNet)으로 대체 (ablation에서 pretrained 효과 측정용)
+            import timm
+            self.backbone = timm.create_model(
+                'swin_tiny_patch4_window7_224.ms_in1k',
+                pretrained=True, num_classes=0, global_pool='avg')
+            num_features = self.backbone.num_features
+            print('[InternImage] pretrained=True → Swin-Tiny(ImageNet) 백본으로 대체')
+        else:
+            configs = {
+                'tiny':  dict(base_channels=64,  depths=(4,4,18,4), groups=(4,8,16,32),  drop_path_rate=0.2),
+                'small': dict(base_channels=80,  depths=(4,4,21,4), groups=(5,10,20,40), drop_path_rate=0.3),
+                'base':  dict(base_channels=112, depths=(4,4,21,4), groups=(7,14,28,56), drop_path_rate=0.4),
+            }
+            cfg = configs.get(model_variant, configs['tiny'])
+            self.backbone = InternImage(**cfg)
+            num_features = self.backbone.num_features
+
         self.classifier = nn.Sequential(
             nn.LayerNorm(num_features),
             nn.Linear(num_features, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(0.1),
+            nn.GELU(), nn.Dropout(0.1),
             nn.Linear(hidden_dim, num_labels),
         )
 
     def forward(self, images, labels=None):
-        features = self.backbone.forward_features(images)
+        if self.pretrained:
+            import torch.nn.functional as F
+            imgs = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
+            features = self.backbone(imgs)
+        else:
+            features = self.backbone.forward_features(images)
         logits = self.classifier(features)
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)

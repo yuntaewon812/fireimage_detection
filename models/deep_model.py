@@ -48,23 +48,35 @@ class CBAMBlock(nn.Module):
         return refined_feature
     
 class DeepModel(nn.Module):
-    def __init__(self, model_name='ResNet50', num_classes=2, input_channels=3):
+    def __init__(self, model_name='ResNet50', num_classes=2, input_channels=3,
+                 pretrained=False):
         super(DeepModel, self).__init__()
 
-        # === Base model 선택 ===
         model_dict = {
             'VGG16': models.vgg16,
-            'ResNet50': models.resnet50,      
+            'ResNet50': models.resnet50,
             'DenseNet121': models.densenet121,
-            "EfficientNetV2":models.efficientnet_v2_s,
-            "ConvNeXtTiny":models.convnext_tiny,
-            "VisionTransformer":models.vit_b_16,
+            'EfficientNetV2': models.efficientnet_v2_s,
+            'ConvNeXtTiny': models.convnext_tiny,
+            'VisionTransformer': models.vit_b_16,
         }
 
         if model_name not in model_dict:
             raise ValueError(f"Unsupported model name: {model_name}")
 
-        base_model = model_dict[model_name](weights=None)  # pretrained 불러오지 않음
+        if pretrained:
+            # torchvision ImageNet 사전학습 가중치 사용
+            weight_map = {
+                'ResNet50': models.ResNet50_Weights.IMAGENET1K_V2,
+                'DenseNet121': models.DenseNet121_Weights.IMAGENET1K_V1,
+                'EfficientNetV2': models.EfficientNet_V2_S_Weights.IMAGENET1K_V1,
+                'ConvNeXtTiny': models.ConvNeXt_Tiny_Weights.IMAGENET1K_V1,
+                'VisionTransformer': models.ViT_B_16_Weights.IMAGENET1K_V1,
+            }
+            w = weight_map.get(model_name, None)
+            base_model = model_dict[model_name](weights=w)
+        else:
+            base_model = model_dict[model_name](weights=None)
 
         # === Feature extractor만 남기기 ===
         if model_name == 'VGG16':

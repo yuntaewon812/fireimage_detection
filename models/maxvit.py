@@ -281,29 +281,46 @@ from models.module import SAFEModule
 
 class MaxViTForImageClassification(nn.Module):
     def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512,
-                 model_variant='tiny'):
+                 model_variant='tiny', pretrained=False):
         super().__init__()
-        configs = {
-            'tiny':  dict(stem_ch=64, channels=(64, 128, 256, 512),
-                          depths=(2, 2, 5, 2), num_heads=(2, 4, 8, 16), drop_path_rate=0.2),
-            'small': dict(stem_ch=64, channels=(96, 192, 384, 768),
-                          depths=(2, 2, 5, 2), num_heads=(3, 6, 12, 24), drop_path_rate=0.3),
-            'base':  dict(stem_ch=64, channels=(96, 192, 384, 768),
-                          depths=(2, 6, 14, 2), num_heads=(3, 6, 12, 24), drop_path_rate=0.4),
-        }
-        cfg = configs.get(model_variant, configs['tiny'])
-        self.backbone = MaxViT(img_size=img_size, partition_size=7, num_classes=0, **cfg)
-        num_features = self.backbone.num_features
+        self.pretrained = pretrained
+
+        if pretrained:
+            import timm
+            timm_name = {'tiny': 'maxvit_tiny_tf_224.in1k',
+                         'small': 'maxvit_small_tf_224.in1k',
+                         'base': 'maxvit_base_tf_224.in1k'}.get(model_variant, 'maxvit_tiny_tf_224.in1k')
+            self.backbone = timm.create_model(timm_name, pretrained=True,
+                                              num_classes=0, global_pool='avg')
+            num_features = self.backbone.num_features
+        else:
+            configs = {
+                'tiny':  dict(stem_ch=64, channels=(64,128,256,512),
+                              depths=(2,2,5,2), num_heads=(2,4,8,16), drop_path_rate=0.2),
+                'small': dict(stem_ch=64, channels=(96,192,384,768),
+                              depths=(2,2,5,2), num_heads=(3,6,12,24), drop_path_rate=0.3),
+                'base':  dict(stem_ch=64, channels=(96,192,384,768),
+                              depths=(2,6,14,2), num_heads=(3,6,12,24), drop_path_rate=0.4),
+            }
+            cfg = configs.get(model_variant, configs['tiny'])
+            self.backbone = MaxViT(img_size=img_size, partition_size=7, num_classes=0, **cfg)
+            num_features = self.backbone.num_features
+
         self.classifier = nn.Sequential(
             nn.LayerNorm(num_features),
             nn.Linear(num_features, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(0.1),
+            nn.GELU(), nn.Dropout(0.1),
             nn.Linear(hidden_dim, num_labels),
         )
 
     def forward(self, images, labels=None):
-        features = self.backbone.forward_features(images)
+        if self.pretrained:
+            # timm maxvit는 window=7 → 입력이 224의 배수여야 함 (160 불가)
+            import torch.nn.functional as F
+            imgs = F.interpolate(images, size=(224, 224), mode='bilinear', align_corners=False)
+            features = self.backbone(imgs)
+        else:
+            features = self.backbone.forward_features(images)
         logits = self.classifier(features)
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)

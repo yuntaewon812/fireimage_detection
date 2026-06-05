@@ -260,52 +260,35 @@ def get_efficientnet_v2(model_name, pretrained=False, nclass=0, dropout=0.1, sto
 class EfficientNetV2ForImageClassification(nn.Module):
     """EfficientNetV2 wrapper for image classification compatible with the project"""
     
-    def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512, 
-                 model_variant='s'):
+    def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512,
+                 model_variant='s', pretrained=False):
         super(EfficientNetV2ForImageClassification, self).__init__()
-        
-        # Model configurations for different variants
+
+        self.pretrained = pretrained
         configs = {
-            's': {
-                'model_name': 'efficientnet_v2_s',
-                'dropout': 0.2,
-                'stochastic_depth': 0.2
-            },
-            'm': {
-                'model_name': 'efficientnet_v2_m',
-                'dropout': 0.3,
-                'stochastic_depth': 0.3
-            },
-            'l': {
-                'model_name': 'efficientnet_v2_l',
-                'dropout': 0.4,
-                'stochastic_depth': 0.4
-            },
-            'xl': {
-                'model_name': 'efficientnet_v2_xl',
-                'dropout': 0.4,
-                'stochastic_depth': 0.5
-            }
+            's': {'model_name': 'efficientnet_v2_s', 'dropout': 0.2, 'stochastic_depth': 0.2},
+            'm': {'model_name': 'efficientnet_v2_m', 'dropout': 0.3, 'stochastic_depth': 0.3},
+            'l': {'model_name': 'efficientnet_v2_l', 'dropout': 0.4, 'stochastic_depth': 0.4},
+            'xl': {'model_name': 'efficientnet_v2_xl', 'dropout': 0.4, 'stochastic_depth': 0.5},
         }
-        
         config = configs.get(model_variant, configs['s'])
-        
-        # Create backbone without classification head
-        self.backbone = get_efficientnet_v2(
-            model_name=config['model_name'],
-            pretrained=False,
-            nclass=0,  # No classification head in backbone
-            dropout=config['dropout'],
-            stochastic_depth=config['stochastic_depth']
-        )
-        
-        # Replace classifier with identity
-        self.backbone.head.classifier = nn.Identity()
-        
-        # Calculate output dimension - EfficientNetV2 uses 1280 as bottleneck
-        num_features = 1280
-        
-        # Classification head
+
+        if pretrained:
+            # timm 사전학습(ImageNet) 백본 — OOD 일반화 향상용
+            import timm
+            timm_name = {'s': 'tf_efficientnetv2_s', 'm': 'tf_efficientnetv2_m',
+                         'l': 'tf_efficientnetv2_l'}.get(model_variant, 'tf_efficientnetv2_s')
+            self.backbone = timm.create_model(timm_name, pretrained=True,
+                                              num_classes=0, global_pool='avg')
+            num_features = self.backbone.num_features
+        else:
+            # 기존: 밑바닥 학습 백본 (변경 없음)
+            self.backbone = get_efficientnet_v2(
+                model_name=config['model_name'], pretrained=False, nclass=0,
+                dropout=config['dropout'], stochastic_depth=config['stochastic_depth'])
+            self.backbone.head.classifier = nn.Identity()
+            num_features = 1280
+
         self.classifier = nn.Sequential(
             nn.LayerNorm(num_features),
             nn.Linear(num_features, hidden_dim),
@@ -315,12 +298,11 @@ class EfficientNetV2ForImageClassification(nn.Module):
         )
 
     def forward(self, images, labels=None):
-        # Extract features
-        features = self.backbone.forward_features(images)
-        
-        # Classification
+        if self.pretrained:
+            features = self.backbone(images)            # timm: (B, num_features) 풀링됨
+        else:
+            features = self.backbone.forward_features(images)
         logits = self.classifier(features)
-        
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)
             return loss, logits
@@ -329,71 +311,55 @@ class EfficientNetV2ForImageClassification(nn.Module):
 from models.module import SAFEModule
 
 class EfficientNetV2ForImageClassification_v2(nn.Module):
-    """EfficientNetV2 wrapper for image classification compatible with the project"""
+    """EfficientNetV2 + SAFE Module (제안 모델) — pretrained 백본 지원"""
 
     def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512,
-                 model_variant='s'):
+                 model_variant='s', pretrained=False):
         super(EfficientNetV2ForImageClassification_v2, self).__init__()
 
-        # Model configurations for different variants
+        self.pretrained = pretrained
         configs = {
-            's': {
-                'model_name': 'efficientnet_v2_s',
-                'dropout': 0.2,
-                'stochastic_depth': 0.2
-            },
-            'm': {
-                'model_name': 'efficientnet_v2_m',
-                'dropout': 0.3,
-                'stochastic_depth': 0.3
-            },
-            'l': {
-                'model_name': 'efficientnet_v2_l',
-                'dropout': 0.4,
-                'stochastic_depth': 0.4
-            },
-            'xl': {
-                'model_name': 'efficientnet_v2_xl',
-                'dropout': 0.4,
-                'stochastic_depth': 0.5
-            }
+            's':  {'model_name': 'efficientnet_v2_s',  'dropout': 0.2, 'stochastic_depth': 0.2},
+            'm':  {'model_name': 'efficientnet_v2_m',  'dropout': 0.3, 'stochastic_depth': 0.3},
+            'l':  {'model_name': 'efficientnet_v2_l',  'dropout': 0.4, 'stochastic_depth': 0.4},
+            'xl': {'model_name': 'efficientnet_v2_xl', 'dropout': 0.4, 'stochastic_depth': 0.5},
         }
-
         config = configs.get(model_variant, configs['s'])
 
-        # Create backbone without classification head
-        self.backbone = get_efficientnet_v2(
-            model_name=config['model_name'],
-            pretrained=False,
-            nclass=0,  # No classification head in backbone
-            dropout=config['dropout'],
-            stochastic_depth=config['stochastic_depth']
-        )
+        SAFE_OUT = 64   # SAFEModule default out_channels
+        if pretrained:
+            import timm
+            timm_name = {'s': 'tf_efficientnetv2_s', 'm': 'tf_efficientnetv2_m',
+                         'l': 'tf_efficientnetv2_l'}.get(model_variant, 'tf_efficientnetv2_s')
+            # global_pool='' → (B, C, H, W) 특징맵 유지 (SAFEModule 입력용)
+            self.backbone = timm.create_model(timm_name, pretrained=True,
+                                              num_classes=0, global_pool='')
+            backbone_ch = self.backbone.num_features   # 1280
+        else:
+            self.backbone = get_efficientnet_v2(
+                model_name=config['model_name'], pretrained=False, nclass=0,
+                dropout=config['dropout'], stochastic_depth=config['stochastic_depth'])
+            self.backbone.head.classifier = nn.Identity()
+            backbone_ch = 1280
 
-        # Replace classifier with identity
-        self.backbone.head.classifier = nn.Identity()
-
-        # Calculate output dimension - EfficientNetV2 uses 1280 as bottleneck
-        num_features = 1280
-
-        self.safe_module = SAFEModule(num_features)
-
-        # Classification head
+        self.safe_module = SAFEModule(backbone_ch, out_channels=SAFE_OUT)
         self.classifier = nn.Sequential(
-            nn.LayerNorm(num_features),
-            nn.Linear(num_features, hidden_dim),
+            nn.LayerNorm(SAFE_OUT),
+            nn.Linear(SAFE_OUT, hidden_dim),
             nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(hidden_dim, num_labels)
         )
 
     def forward(self, images, labels=None):
-        # Extract features
-        features = self.backbone.forward_features(images)
-
-        # Classification
+        if self.pretrained:
+            feat_map = self.backbone(images)          # (B, C, H, W)
+            features = self.safe_module(feat_map).mean([-2, -1])  # (B, 64)
+        else:
+            raw = self.backbone.forward_features(images)
+            raw4d = raw.unsqueeze(-1).unsqueeze(-1) if raw.dim() == 2 else raw
+            features = self.safe_module(raw4d).mean([-2, -1])    # (B, 64)
         logits = self.classifier(features)
-
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)
             return loss, logits

@@ -402,66 +402,46 @@ class NextViTForImageClassification_v2(nn.Module):
 
 
 class NextViTForImageClassification(nn.Module):
-    """NextViT wrapper for image classification compatible with the project"""
-    
-    def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512, 
-                 model_variant='small'):
+    """NextViT wrapper — pretrained 백본(timm) 지원"""
+
+    def __init__(self, num_labels=7, img_size=224, patch_size=16, hidden_dim=512,
+                 model_variant='small', pretrained=False):
         super(NextViTForImageClassification, self).__init__()
-        
-        # Model configurations for different variants
-        configs = {
-            'small': {
-                'stem_chs': [64, 32, 64],
-                'depths': [3, 4, 10, 3],
-                'path_dropout': 0.1
-            },
-            'base': {
-                'stem_chs': [64, 32, 64],
-                'depths': [3, 4, 20, 3],
-                'path_dropout': 0.2
-            },
-            'large': {
-                'stem_chs': [64, 32, 64],
-                'depths': [3, 4, 30, 3],
-                'path_dropout': 0.2
+        self.pretrained = pretrained
+
+        if pretrained:
+            import timm
+            timm_name = {'small': 'nextvit_small', 'base': 'nextvit_base',
+                         'large': 'nextvit_large'}.get(model_variant, 'nextvit_small')
+            self.backbone = timm.create_model(timm_name, pretrained=True,
+                                              num_classes=0, global_pool='avg')
+            num_features = self.backbone.num_features
+        else:
+            configs = {
+                'small': {'stem_chs': [64,32,64], 'depths': [3,4,10,3], 'path_dropout': 0.1},
+                'base':  {'stem_chs': [64,32,64], 'depths': [3,4,20,3], 'path_dropout': 0.2},
+                'large': {'stem_chs': [64,32,64], 'depths': [3,4,30,3], 'path_dropout': 0.2},
             }
-        }
-        
-        config = configs.get(model_variant, configs['small'])
-        
-        # Create backbone without classification head
-        self.backbone = NextViT(
-            stem_chs=config['stem_chs'],
-            depths=config['depths'],
-            path_dropout=config['path_dropout'],
-            num_classes=0,  # No classification head in backbone
-            attn_drop=0,
-            drop=0
-        )
-        
-        # Calculate output dimension based on the model architecture
-        # For NextViT, the final dimension is 1024 for all variants
-        num_features = 1024
-        
-        # Replace the projection head
-        self.backbone.proj_head = nn.Identity()
-        
-        # Classification head
+            config = configs.get(model_variant, configs['small'])
+            self.backbone = NextViT(
+                stem_chs=config['stem_chs'], depths=config['depths'],
+                path_dropout=config['path_dropout'], num_classes=0, attn_drop=0, drop=0)
+            self.backbone.proj_head = nn.Identity()
+            num_features = 1024
+
         self.classifier = nn.Sequential(
             nn.LayerNorm(num_features),
             nn.Linear(num_features, hidden_dim),
-            nn.GELU(),
-            nn.Dropout(0.1),
+            nn.GELU(), nn.Dropout(0.1),
             nn.Linear(hidden_dim, num_labels)
         )
 
     def forward(self, images, labels=None):
-        # Extract features
-        features = self.backbone.forward_features(images)
-        
-        # Classification
+        if self.pretrained:
+            features = self.backbone(images)
+        else:
+            features = self.backbone.forward_features(images)
         logits = self.classifier(features)
-        
         if labels is not None:
             loss = nn.CrossEntropyLoss()(logits, labels)
             return loss, logits
