@@ -2,12 +2,65 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
+import torchvision.transforms.functional as TF
+import random
 from sklearn.metrics import balanced_accuracy_score, recall_score, precision_score, f1_score, roc_auc_score
 
 import datetime
 from zoneinfo import ZoneInfo
 
 from utils.utils import save_csv, plot_confusion_matrix, roc_plot
+
+
+# =========================
+# Online 증강 (배치 텐서 → 텐서)
+# =========================
+def augment_batch(x: torch.Tensor, augment: bool = False) -> torch.Tensor:
+    """
+    텐서 배치(B, C, H, W)에 랜덤 증강 적용 (학습 시만).
+    pretrained 백본의 OOD 일반화를 위한 도메인 랜덤화.
+      - RandomHorizontalFlip
+      - ColorJitter (밝기·대비·채도·색조)
+      - RandomRotation (±15°)
+      - RandomErasing (Cutout)
+    """
+    if not augment:
+        return x
+
+    out = []
+    for img in x:
+        # 수평 뒤집기
+        if random.random() < 0.5:
+            img = TF.hflip(img)
+        # Color jitter
+        if random.random() < 0.8:
+            img = TF.adjust_brightness(img, 1.0 + random.uniform(-0.3, 0.3))
+            img = TF.adjust_contrast(img,   1.0 + random.uniform(-0.3, 0.3))
+            img = TF.adjust_saturation(img, 1.0 + random.uniform(-0.3, 0.3))
+            img = TF.adjust_hue(img, random.uniform(-0.1, 0.1))
+        # 회전
+        if random.random() < 0.5:
+            img = TF.rotate(img, random.uniform(-15, 15))
+        # Cutout (Random Erasing)
+        if random.random() < 0.5:
+            _, H, W = img.shape
+            rh = int(H * random.uniform(0.1, 0.3))
+            rw = int(W * random.uniform(0.1, 0.3))
+            y0 = random.randint(0, H - rh)
+            x0 = random.randint(0, W - rw)
+            img = img.clone()
+            img[:, y0:y0+rh, x0:x0+rw] = 0.0
+        out.append(img)
+    return torch.stack(out)
+
+
+def mixup_batch(x: torch.Tensor, y: torch.Tensor, alpha: float = 0.4):
+    """Mixup: 두 샘플을 가중 혼합해 경계 부드럽게 → OOD 일반화↑"""
+    lam = np.random.beta(alpha, alpha)
+    idx = torch.randperm(x.size(0), device=x.device)
+    x_mix = lam * x + (1 - lam) * x[idx]
+    y_a, y_b = y, y[idx]
+    return x_mix, y_a, y_b, lam
 
 
 # =========================
@@ -42,15 +95,26 @@ def compute_ece(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -> flo
 # =========================
 # 1️⃣ 한 epoch 학습
 # =========================
-def train_one_epoch(model, dataloader, optimizer, criterion, device):
+def train_one_epoch(model, dataloader, optimizer, criterion, device,
+                    augment: bool = False, use_mixup: bool = False):
     model.train()
     total_loss, total_correct, total_samples = 0, 0, 0
 
     for X_batch, y_batch in dataloader:
         X_batch, y_batch = X_batch.to(device), y_batch.to(device)
+
+        # Online 증강
+        X_batch = augment_batch(X_batch, augment=augment)
+
         optimizer.zero_grad()
-        outputs = model(X_batch)
-        loss = criterion(outputs, y_batch)
+        if use_mixup:
+            X_mix, y_a, y_b, lam = mixup_batch(X_batch, y_batch)
+            outputs = model(X_mix)
+            loss = lam * criterion(outputs, y_a) + (1 - lam) * criterion(outputs, y_b)
+        else:
+            outputs = model(X_batch)
+            loss = criterion(outputs, y_batch)
+
         loss.backward()
         optimizer.step()
 
@@ -59,9 +123,7 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device):
         total_correct += (preds == y_batch).sum().item()
         total_samples += y_batch.size(0)
 
-    avg_loss = total_loss / total_samples
-    avg_acc = total_correct / total_samples
-    return avg_loss, avg_acc
+    return total_loss / total_samples, total_correct / total_samples
 
 
 # =========================
@@ -138,7 +200,9 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
                     lr=1e-3, epochs=50, patience=10, device='cuda',
                     per_model_lr: dict = None,
                     force_retrain: set = None,
-                    use_scheduler: set = None):
+                    use_scheduler: set = None,
+                    augment: bool = False,
+                    use_mixup: bool = False):
 
     try:
         import intel_extension_for_pytorch as ipex  # noqa: F401
@@ -205,7 +269,8 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
         # -----------------------------
         if training_needed:
             for epoch in range(epochs):
-                train_loss, train_acc = train_one_epoch(model, train_loader, optimizer, criterion, device)
+                train_loss, train_acc = train_one_epoch(model, train_loader, optimizer, criterion, device,
+                                                           augment=augment, use_mixup=use_mixup)
                 val_loss, val_acc, _, _, _, _ = evaluate_model(model, val_loader, criterion, device)
 
                 if scheduler is not None:
