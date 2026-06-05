@@ -51,12 +51,14 @@ torch.set_num_interop_threads(4)
 # ──────────────────────────────────────────────────────────────
 SETTINGS = {
     # 설정 A = baseline (v25), 여기선 B/C/D만 실행
-    'B': dict(pretrained=True,  augment=False, mixup=False,
+    'B': dict(pretrained=True,  augment=False, mixup=False, augment_type='standard',
               desc='사전학습(ImageNet) 백본'),
-    'C': dict(pretrained=True,  augment=True,  mixup=False,
+    'C': dict(pretrained=True,  augment=True,  mixup=False, augment_type='standard',
               desc='사전학습 + Online 증강(ColorJitter/Flip/Rotation/Cutout)'),
-    'D': dict(pretrained=True,  augment=True,  mixup=True,
+    'D': dict(pretrained=True,  augment=True,  mixup=True,  augment_type='standard',
               desc='사전학습 + 증강 + Mixup(α=0.4)'),
+    'E': dict(pretrained=True,  augment=True,  mixup=True,  augment_type='youtube',
+              desc='사전학습 + YouTube 도메인 증강(압축/모션블러/해상도저하/색온도/자막) + Mixup'),
 }
 
 PER_MODEL_LR = {
@@ -70,8 +72,8 @@ PER_MODEL_LR = {
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--class_name', default='fireimage')
-    p.add_argument('--setting', default='B', choices=['B','C','D','all'],
-                   help='ablation 설정: B=pretrained, C=+증강, D=+mixup, all=B→C→D')
+    p.add_argument('--setting', default='B', choices=['B','C','D','E','all'],
+                   help='ablation 설정: B=pretrained, C=+증강, D=+mixup, E=+YouTube증강, all=B→C→D→E')
     return p.parse_args()
 
 
@@ -133,6 +135,7 @@ def run_setting(setting_key: str, class_name: str, X, y, groups):
             force_retrain=set(make_models(True).keys()),  # 항상 재학습
             augment=cfg['augment'],
             use_mixup=cfg['mixup'],
+            augment_type=cfg['augment_type'],
         )
     print(f'\n  ✓ 설정 {setting_key} 완료. results/{save_name}/metrics.csv 확인')
 
@@ -149,7 +152,7 @@ def main():
     print(f'  총 {len(X):,}  | normal={n_normal:,} / abnormal={n_abnormal:,}')
     assert n_normal > 0 and n_abnormal > 0
 
-    to_run = list(SETTINGS.keys()) if args.setting == 'all' else [args.setting]
+    to_run = ['B', 'C', 'D', 'E'] if args.setting == 'all' else [args.setting]
     for s in to_run:
         run_setting(s, args.class_name, X, y, groups)
 

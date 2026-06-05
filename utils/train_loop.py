@@ -2,7 +2,6 @@ import os
 import numpy as np
 import torch
 import torch.nn as nn
-import torchvision.transforms.functional as TF
 import random
 from sklearn.metrics import balanced_accuracy_score, recall_score, precision_score, f1_score, roc_auc_score
 
@@ -17,41 +16,122 @@ from utils.utils import save_csv, plot_confusion_matrix, roc_plot
 # =========================
 def augment_batch(x: torch.Tensor, augment: bool = False) -> torch.Tensor:
     """
-    텐서 배치(B, C, H, W)에 랜덤 증강 적용 (학습 시만).
-    pretrained 백본의 OOD 일반화를 위한 도메인 랜덤화.
-      - RandomHorizontalFlip
-      - ColorJitter (밝기·대비·채도·색조)
-      - RandomRotation (±15°)
-      - RandomErasing (Cutout)
+    GPU 벡터화 증강 — Python for 루프 없이 배치 전체를 텐서 연산으로 처리.
+    CPU 병목 제거 → GPU 효율 최대화.
     """
     if not augment:
         return x
 
-    out = []
-    for img in x:
-        # 수평 뒤집기
+    device = x.device
+    B, C, H, W = x.shape
+    x = x.clone()
+
+    # 1. RandomHorizontalFlip (GPU, 배치 전체)
+    flip = torch.rand(B, device=device) < 0.5            # (B,) bool
+    x[flip] = x[flip].flip(-1)
+
+    # 2. ColorJitter (GPU, 배치 공통 계수 — 빠른 도메인 랜덤화)
+    if random.random() < 0.8:
+        b = 1.0 + random.uniform(-0.3, 0.3)
+        c = 1.0 + random.uniform(-0.3, 0.3)
+        s = 1.0 + random.uniform(-0.3, 0.3)
+        x = torch.clamp(x * b, 0.0, 1.0)
+        m = x.mean(dim=[-2, -1], keepdim=True)
+        x = torch.clamp(m + (x - m) * c, 0.0, 1.0)
+        # 채도: RGB → 명도 채널 혼합
+        gray = 0.299*x[:,0:1] + 0.587*x[:,1:2] + 0.114*x[:,2:3]
+        x = torch.clamp(gray + (x - gray) * s, 0.0, 1.0)
+
+    # 3. Random Erasing (GPU — 좌표만 CPU, 마스크는 GPU)
+    er = torch.rand(B, device=device) < 0.5
+    if er.any():
+        rh = max(1, int(H * random.uniform(0.1, 0.3)))
+        rw = max(1, int(W * random.uniform(0.1, 0.3)))
+        y0 = random.randint(0, H - rh)
+        x0 = random.randint(0, W - rw)
+        x[er, :, y0:y0+rh, x0:x0+rw] = 0.0
+
+    # 4. RandomVerticalFlip (보조)
+    vflip = torch.rand(B, device=device) < 0.2
+    x[vflip] = x[vflip].flip(-2)
+
+    return x
+
+
+def augment_batch_youtube(x: torch.Tensor) -> torch.Tensor:
+    """
+    YouTube 도메인 특화 증강 (설정 E).
+
+    CCTV 학습 데이터와 YouTube 실환경 영상의 시각적 도메인 갭을 줄이기 위해
+    YouTube 고유의 열화(degradation) 패턴을 학습 시 미리 경험시킨다.
+
+    표준 증강(C)과 누적 적용:
+      1. JPEG/영상 압축 아티팩트 시뮬레이션
+      2. 모션 블러 (핸드헬드·헬기 카메라)
+      3. 해상도 저하 (저화질 업로드 후 업스케일)
+      4. 색온도 시프트 (카메라별 화이트밸런스 차이)
+      5. 자막/로고 오버레이 시뮬레이션 (하단 밴드 마스킹)
+    """
+    import torch.nn.functional as F
+
+    device = x.device
+    B, C, H, W = x.shape
+    x = x.clone()
+
+    # ── 1. JPEG 압축 아티팩트 시뮬레이션 ─────────────────────────
+    # 고주파 노이즈 + 약한 평균 블러 → 압축 블록 노이즈와 유사한 효과
+    if random.random() < 0.6:
+        noise_std = random.uniform(0.01, 0.06)
+        noise = torch.randn_like(x) * noise_std
+        x = torch.clamp(x + noise, 0.0, 1.0)
+        # 3×3 평균 블러로 블록 경계 뭉개기
+        kernel = torch.ones(C, 1, 3, 3, device=device) / 9.0
+        x = F.conv2d(x, kernel, padding=1, groups=C)
+        x = torch.clamp(x, 0.0, 1.0)
+
+    # ── 2. 모션 블러 ──────────────────────────────────────────────
+    # 수평/수직 방향성 블러 커널로 카메라 움직임 시뮬레이션
+    if random.random() < 0.4:
+        k = random.choice([5, 7, 9])
         if random.random() < 0.5:
-            img = TF.hflip(img)
-        # Color jitter
-        if random.random() < 0.8:
-            img = TF.adjust_brightness(img, 1.0 + random.uniform(-0.3, 0.3))
-            img = TF.adjust_contrast(img,   1.0 + random.uniform(-0.3, 0.3))
-            img = TF.adjust_saturation(img, 1.0 + random.uniform(-0.3, 0.3))
-            img = TF.adjust_hue(img, random.uniform(-0.1, 0.1))
-        # 회전
-        if random.random() < 0.5:
-            img = TF.rotate(img, random.uniform(-15, 15))
-        # Cutout (Random Erasing)
-        if random.random() < 0.5:
-            _, H, W = img.shape
-            rh = int(H * random.uniform(0.1, 0.3))
-            rw = int(W * random.uniform(0.1, 0.3))
-            y0 = random.randint(0, H - rh)
-            x0 = random.randint(0, W - rw)
-            img = img.clone()
-            img[:, y0:y0+rh, x0:x0+rw] = 0.0
-        out.append(img)
-    return torch.stack(out)
+            # 수평 블러
+            kernel = torch.zeros(C, 1, 1, k, device=device)
+            kernel[:, :, 0, :] = 1.0 / k
+        else:
+            # 수직 블러
+            kernel = torch.zeros(C, 1, k, 1, device=device)
+            kernel[:, :, :, 0] = 1.0 / k
+        pad = k // 2
+        x = F.conv2d(x, kernel, padding=(kernel.shape[2]//2, kernel.shape[3]//2), groups=C)
+        x = torch.clamp(x, 0.0, 1.0)
+
+    # ── 3. 해상도 저하 (다운샘플 → 업샘플) ───────────────────────
+    # 저화질 영상 업로드 시 생기는 픽셀 뭉개짐 재현
+    if random.random() < 0.5:
+        scale = random.uniform(0.4, 0.75)
+        h_small = max(16, int(H * scale))
+        w_small = max(16, int(W * scale))
+        x = F.interpolate(x, size=(h_small, w_small), mode='bilinear', align_corners=False)
+        x = F.interpolate(x, size=(H, W), mode='bilinear', align_corners=False)
+        x = torch.clamp(x, 0.0, 1.0)
+
+    # ── 4. 색온도 시프트 ──────────────────────────────────────────
+    # 뉴스 카메라 vs CCTV 화이트밸런스 차이 (파랑↔노랑 축)
+    if random.random() < 0.5:
+        shift = random.uniform(-0.08, 0.08)
+        x[:, 0] = torch.clamp(x[:, 0] + shift, 0.0, 1.0)   # R 채널
+        x[:, 2] = torch.clamp(x[:, 2] - shift, 0.0, 1.0)   # B 채널
+
+    # ── 5. 자막/로고 오버레이 시뮬레이션 ─────────────────────────
+    # 뉴스 자막이 주로 위치하는 하단 영역을 반투명 검정으로 마스킹
+    if random.random() < 0.3:
+        band_h = int(H * random.uniform(0.06, 0.15))
+        y_start = int(H * random.uniform(0.75, 0.88))
+        y_end = min(H, y_start + band_h)
+        alpha = random.uniform(0.3, 0.7)   # 불투명도
+        x[:, :, y_start:y_end, :] *= (1.0 - alpha)
+
+    return x
 
 
 def mixup_batch(x: torch.Tensor, y: torch.Tensor, alpha: float = 0.4):
@@ -96,7 +176,8 @@ def compute_ece(y_true: np.ndarray, y_prob: np.ndarray, n_bins: int = 10) -> flo
 # 1️⃣ 한 epoch 학습
 # =========================
 def train_one_epoch(model, dataloader, optimizer, criterion, device,
-                    augment: bool = False, use_mixup: bool = False):
+                    augment: bool = False, use_mixup: bool = False,
+                    augment_type: str = 'standard'):
     model.train()
     total_loss, total_correct, total_samples = 0, 0, 0
 
@@ -105,6 +186,8 @@ def train_one_epoch(model, dataloader, optimizer, criterion, device,
 
         # Online 증강
         X_batch = augment_batch(X_batch, augment=augment)
+        if augment and augment_type == 'youtube':
+            X_batch = augment_batch_youtube(X_batch)
 
         optimizer.zero_grad()
         if use_mixup:
@@ -202,7 +285,8 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
                     force_retrain: set = None,
                     use_scheduler: set = None,
                     augment: bool = False,
-                    use_mixup: bool = False):
+                    use_mixup: bool = False,
+                    augment_type: str = 'standard'):
 
     try:
         import intel_extension_for_pytorch as ipex  # noqa: F401
@@ -270,7 +354,8 @@ def train_full_loop(train_loader, val_loader, test_loader, model_dicts, class_na
         if training_needed:
             for epoch in range(epochs):
                 train_loss, train_acc = train_one_epoch(model, train_loader, optimizer, criterion, device,
-                                                           augment=augment, use_mixup=use_mixup)
+                                                           augment=augment, use_mixup=use_mixup,
+                                                           augment_type=augment_type)
                 val_loss, val_acc, _, _, _, _ = evaluate_model(model, val_loader, criterion, device)
 
                 if scheduler is not None:
