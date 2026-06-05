@@ -1,4 +1,6 @@
-{
+import json
+
+nb = {
  "cells": [
   {
    "cell_type": "markdown",
@@ -21,7 +23,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -35,7 +37,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -57,7 +59,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -68,7 +70,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -86,7 +88,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -116,7 +118,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -127,7 +129,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -160,7 +162,7 @@
   },
   {
    "cell_type": "code",
-   "execution_count": null,
+   "execution_count": None,
    "metadata": {},
    "outputs": [],
    "source": [
@@ -175,17 +177,14 @@
  ],
  "metadata": {
   "accelerator": "GPU",
-  "colab": {
-   "provenance": []
-  },
-  "kernelspec": {
-   "display_name": "Python 3",
-   "name": "python3"
-  },
-  "language_info": {
-   "name": "python"
-  }
+  "colab": {"provenance": []},
+  "kernelspec": {"display_name": "Python 3", "name": "python3"},
+  "language_info": {"name": "python"}
  },
  "nbformat": 4,
  "nbformat_minor": 0
 }
+
+with open(r'C:\fireimage_detection\demo\colab_ablation.ipynb', 'w', encoding='utf-8') as f:
+    json.dump(nb, f, ensure_ascii=False, indent=1)
+print("노트북 생성 완료")
