@@ -1,0 +1,43 @@
+# YouTube 영상 링크 목록
+# 형식:  label,URL   (label = abnormal[화재] 또는 normal[정상])
+# 재생목록(&list=) 파라미터 제거 — --no-playlist로 단일 영상만 받음.
+
+# ═══════════ 정상(normal) 17편 ═══════════
+# ── vlog (아마추어) ──
+normal,https://www.youtube.com/watch?v=VQL4UK-yuPs
+normal,https://www.youtube.com/watch?v=2FMLjd-BoB0
+normal,https://www.youtube.com/watch?v=OKXCVU5-bo4
+normal,https://www.youtube.com/watch?v=ndr6NqUvtr8
+normal,https://www.youtube.com/watch?v=e2Dz49Pgrd0
+normal,https://www.youtube.com/watch?v=ZUsf9jChwAY
+normal,https://www.youtube.com/watch?v=gFo-S0KHtU4
+normal,https://www.youtube.com/watch?v=mh9rnO_w_H8
+normal,https://www.youtube.com/watch?v=mLKYV4QBLT8
+normal,https://www.youtube.com/watch?v=1aUOccmPdxQ
+normal,https://www.youtube.com/watch?v=lonoZZ60ljg
+# ── 다큐/자연방송 ──
+normal,https://www.youtube.com/watch?v=RWtHsVJmD0U
+normal,https://www.youtube.com/watch?v=K6e8sfcnlo0
+normal,https://www.youtube.com/watch?v=4ofdxht-jLY
+# ── 뉴스 (불 없는 산림/일반 보도) ──
+normal,https://www.youtube.com/watch?v=x_WPwKHOYEA
+normal,https://www.youtube.com/watch?v=_vuevgoQGqI
+normal,https://www.youtube.com/watch?v=QtkD1bhHrS0
+
+# ═══════════ 화재(abnormal) 13편 ═══════════
+# ── 뉴스 (비화재 컷 수동 삭제 필요) ──
+abnormal,https://www.youtube.com/watch?v=D1qr3N1VvSI
+abnormal,https://www.youtube.com/watch?v=svRYpeSvQ14
+abnormal,https://www.youtube.com/watch?v=iA1LkiG5In0
+abnormal,https://www.youtube.com/watch?v=5HwG5NQVVvU
+abnormal,https://www.youtube.com/watch?v=0NEcN2xdzck
+abnormal,https://www.youtube.com/watch?v=dYDz6VzoR44
+abnormal,https://www.youtube.com/watch?v=sXj4u5AXGWM
+abnormal,https://www.youtube.com/watch?v=zq204dQwZOA
+abnormal,https://www.youtube.com/watch?v=ZbCeGnO2arM
+# ── 다큐 (불 구간만 추출) ──
+abnormal,https://www.youtube.com/watch?v=86pk_czfIc8
+# ── 드론 (불/연기 확인 후 사용) ──
+abnormal,https://www.youtube.com/watch?v=gh0IyTMqgm8
+abnormal,https://www.youtube.com/watch?v=UPfi6gSXAUU
+abnormal,https://www.youtube.com/watch?v=xyy9zq9viOs

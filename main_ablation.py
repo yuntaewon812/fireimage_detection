@@ -58,7 +58,8 @@ SETTINGS = {
     'D': dict(pretrained=True,  augment=True,  mixup=True,  augment_type='standard',
               desc='사전학습 + 증강 + Mixup(α=0.4)'),
     'E': dict(pretrained=True,  augment=True,  mixup=True,  augment_type='youtube',
-              desc='사전학습 + YouTube 도메인 증강(압축/모션블러/해상도저하/색온도/자막) + Mixup'),
+              desc='사전학습 + 양쪽 대칭 강증강(압축/모션블러/해상도저하/색온도/자막) + Mixup '
+                   '— 영상 스타일(뉴스/vlog) 단서 제거용'),
 }
 
 PER_MODEL_LR = {
@@ -72,8 +73,12 @@ PER_MODEL_LR = {
 def parse_args():
     p = argparse.ArgumentParser()
     p.add_argument('--class_name', default='fireimage')
-    p.add_argument('--setting', default='B', choices=['B','C','D','E','all'],
-                   help='ablation 설정: B=pretrained, C=+증강, D=+mixup, E=+YouTube증강, all=B→C→D→E')
+    p.add_argument('--setting', default='E', choices=['B','C','D','E','all'],
+                   help='ablation 설정: B=pretrained, C=+증강, D=+mixup, E=+대칭강증강, all=B→C→D→E')
+    p.add_argument('--epochs', type=int, default=15,
+                   help='최대 epoch (기본 15, 데드라인 단축용)')
+    p.add_argument('--patience', type=int, default=5,
+                   help='early stopping patience (기본 5)')
     return p.parse_args()
 
 
@@ -104,7 +109,8 @@ def make_models(pretrained: bool) -> dict:
     }
 
 
-def run_setting(setting_key: str, class_name: str, X, y, groups):
+def run_setting(setting_key: str, class_name: str, X, y, groups,
+                epochs: int = 15, patience: int = 5):
     cfg = SETTINGS[setting_key]
     save_name = f'{class_name}_abl_{setting_key}'
     print(f'\n{"="*55}')
@@ -130,7 +136,7 @@ def run_setting(setting_key: str, class_name: str, X, y, groups):
             train_loader, val_loader, test_loader,
             make_models(cfg['pretrained']),
             save_name, fold_idx,
-            lr=3e-4, epochs=30, patience=8,
+            lr=3e-4, epochs=epochs, patience=patience,
             per_model_lr=PER_MODEL_LR,
             force_retrain=set(make_models(True).keys()),  # 항상 재학습
             augment=cfg['augment'],
@@ -153,8 +159,10 @@ def main():
     assert n_normal > 0 and n_abnormal > 0
 
     to_run = ['B', 'C', 'D', 'E'] if args.setting == 'all' else [args.setting]
+    print(f'  학습 설정: epochs={args.epochs}, patience={args.patience}')
     for s in to_run:
-        run_setting(s, args.class_name, X, y, groups)
+        run_setting(s, args.class_name, X, y, groups,
+                    epochs=args.epochs, patience=args.patience)
 
     print('\n[전체 완료] ablation 결과 비교:')
     import csv
