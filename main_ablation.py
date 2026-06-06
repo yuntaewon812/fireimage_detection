@@ -138,7 +138,7 @@ def run_setting(setting_key: str, class_name: str, X, y, groups,
             save_name, fold_idx,
             lr=3e-4, epochs=epochs, patience=patience,
             per_model_lr=PER_MODEL_LR,
-            force_retrain=set(make_models(True).keys()),  # 항상 재학습
+            force_retrain=set(),  # 빈 set = 이어학습(저장된 가중치 있으면 건너뜀)
             augment=cfg['augment'],
             use_mixup=cfg['mixup'],
             augment_type=cfg['augment_type'],
