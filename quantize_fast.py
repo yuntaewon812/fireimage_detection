@@ -33,18 +33,70 @@ if zip_path and not os.path.isdir(os.path.join(model_save, CLASS)):
         z.extractall(model_save)
     print('  완료')
 
-# ── 모델 임포트 ───────────────────────────────────────────────────
-from models.efficientnetv2 import EfficientNetV2ForImageClassification
-from models.maxvit import MaxViTForImageClassification
+# ── 모델 빌드 (state_dict 키 보고 timm 여부 자동 판단) ──────────────
+import torch.nn as nn
 
-def build(name):
+def build(name, state_dict):
+    """state_dict 키를 보고 timm 백본(pretrained=True) vs 자체 구현 판단."""
+    keys = list(state_dict.keys())
+    is_timm = any('conv_stem' in k or 'stem.0' in k or 'patch_embed' in k
+                  for k in keys[:10])
+
     if name == 'efficientnetv2':
-        return EfficientNetV2ForImageClassification(
-            num_labels=2, img_size=160, patch_size=16,
-            hidden_dim=512, model_variant='s', pretrained=False)
-    return MaxViTForImageClassification(
-        num_labels=2, img_size=160, patch_size=16,
-        hidden_dim=512, model_variant='tiny', pretrained=False)
+        if is_timm:
+            # pretrained=True로 학습 → timm tf_efficientnetv2_s 구조 재현
+            import timm
+            backbone = timm.create_model('tf_efficientnetv2_s',
+                                         pretrained=False, num_classes=0, global_pool='avg')
+            num_features = backbone.num_features  # 1280
+
+            class _EffNet(nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.backbone = backbone
+                    self.classifier = nn.Sequential(
+                        nn.LayerNorm(num_features),
+                        nn.Linear(num_features, 512),
+                        nn.GELU(),
+                        nn.Dropout(0.1),
+                        nn.Linear(512, 2),
+                    )
+                def forward(self, x):
+                    return self.classifier(self.backbone(x))
+            return _EffNet()
+        else:
+            from models.efficientnetv2 import EfficientNetV2ForImageClassification
+            return EfficientNetV2ForImageClassification(
+                num_labels=2, img_size=160, patch_size=16,
+                hidden_dim=512, model_variant='s', pretrained=False)
+
+    elif name == 'maxvit':
+        # maxvit pretrained=True는 timm maxvit_tiny_tf_224.in1k 사용
+        # timm 키: stem.conv1, stages.0.blocks.0.conv.pre_norm (stem.0 아님)
+        # → is_timm 로직과 무관하게 항상 timm 구조 재현
+        import timm as _timm
+        backbone = _timm.create_model('maxvit_tiny_tf_224.in1k',
+                                      pretrained=False, num_classes=0, global_pool='avg')
+        num_features = backbone.num_features
+
+        class _MaxViT(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.backbone = backbone
+                self.classifier = nn.Sequential(
+                    nn.LayerNorm(num_features),
+                    nn.Linear(num_features, 512),
+                    nn.GELU(),
+                    nn.Dropout(0.1),
+                    nn.Linear(512, 2),
+                )
+            def forward(self, x):
+                import torch.nn.functional as F
+                x = F.interpolate(x, size=(224, 224), mode='bilinear', align_corners=False)
+                return self.classifier(self.backbone(x))
+        return _MaxViT()
+
+    raise ValueError(f'알 수 없는 모델: {name}')
 
 # ── 실행 ─────────────────────────────────────────────────────────
 rows = []
@@ -63,9 +115,12 @@ for name in TARGET:
         # 원본 크기
         orig_mb = os.path.getsize(w) / 1024 / 1024
 
+        # state_dict 로드 → 키 확인 → 맞는 모델 빌드
+        state = torch.load(w, map_location='cpu', weights_only=True)
+
         # INT8 변환
-        m = build(name)
-        m.load_state_dict(torch.load(w, map_location='cpu', weights_only=True))
+        m = build(name, state)
+        m.load_state_dict(state)
         m.eval()
         m = torch.quantization.quantize_dynamic(m.cpu(), {nn.Linear}, dtype=torch.qint8)
 
