@@ -21,10 +21,19 @@ for sub in ['model_save', 'results']:
     os.symlink(f'{CKPT}/{sub}', link)
 print('[1/2] 결과 Drive 영구저장 설정 완료')
 
-# 2. 데이터 압축해제
-if not os.path.exists(ZIP):
-    raise SystemExit(f'[오류] Drive에 zip 없음: {ZIP}\n'
-                     '  PC Drive 계정과 Colab 로그인 계정이 같은지 확인하세요.')
+# 2. 데이터 압축해제 — zip 위치 자동 탐색 (Drive / 업로드 / 어디든)
+candidates = [
+    '/content/drive/MyDrive/fireimage_clean.zip',
+    '/content/fireimage_clean.zip',
+    f'{REPO}/fireimage_clean.zip',
+]
+candidates += glob.glob('/content/**/fireimage_clean.zip', recursive=True)
+ZIP = next((z for z in candidates if os.path.exists(z)), None)
+if ZIP is None:
+    raise SystemExit('[오류] fireimage_clean.zip 못 찾음\n'
+                     '  방법1) files.upload()로 PC에서 직접 업로드\n'
+                     '  방법2) Drive(MyDrive)에 업로드 (계정 일치 필요)')
+print(f'  zip 발견: {ZIP}')
 if os.path.exists(BASE):
     shutil.rmtree(BASE)
 os.makedirs(BASE, exist_ok=True)
