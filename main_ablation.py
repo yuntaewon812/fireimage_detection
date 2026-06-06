@@ -126,7 +126,7 @@ def run_setting(setting_key: str, class_name: str, X, y, groups,
             stratify=y[train_index].numpy())
 
         train_loader = DataLoader(TensorDataset(X[train_idx], y[train_idx]),
-                                  batch_size=8, shuffle=True)
+                                  batch_size=8, shuffle=True, drop_last=True)
         val_loader   = DataLoader(TensorDataset(X[val_idx],   y[val_idx]),
                                   batch_size=8, shuffle=False)
         test_loader  = DataLoader(TensorDataset(X[test_index], y[test_index]),
