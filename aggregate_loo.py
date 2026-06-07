@@ -159,8 +159,15 @@ def main():
             w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
             w.writeheader(); w.writerows(rows)
         print(f'\n저장 → {out_csv}')
-        print('\n해석: ΔOOD가 음수이고 p<0.05(*)면 "그 요소를 빼면 OOD-F1이 유의하게 하락"'
-              ' = 해당 기법이 통계적으로 유의미하게 기여.')
+        # 표본 수에 따라 해석 안내를 다르게
+        n = rows[0].get('n_seeds', 0)
+        if n and n <= 1:
+            print('\n[단일 시드(1004)] 표본 = 3-fold 뿐 → 검정력 약함.')
+            print('해석: ΔOOD가 음수이고 "3 fold 모두 일관 하락"이면 그 기법이 기여한다는 '
+                  '방향성으로 보고 (p값은 참고치). "통계적 유의" 대신 "3-fold 일관성"으로 표현 권장.')
+        else:
+            print('\n해석: ΔOOD가 음수이고 p<0.05(*)면 "그 요소를 빼면 OOD-F1이 유의하게 하락"'
+                  ' = 해당 기법이 통계적으로 유의미하게 기여.')
     else:
         print('\n집계할 결과 없음 — main_ablation_loo.py 먼저 실행')
 

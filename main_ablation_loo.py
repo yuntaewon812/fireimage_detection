@@ -80,7 +80,8 @@ def parse_args():
     p.add_argument('--variants', default='full,no_pretrained,no_augment,no_mixup,no_strongaug',
                    help='쉼표 구분 LOO variant')
     p.add_argument('--models', default='efficientnetv2,maxvit')
-    p.add_argument('--seeds', default='1004,2024,777', help='쉼표 구분 시드')
+    p.add_argument('--seeds', default='1004',
+                   help='쉼표 구분 시드 (기본 1004 단일 — 프로젝트 전체와 동일, 변경 금지)')
     p.add_argument('--epochs', type=int, default=15)
     p.add_argument('--patience', type=int, default=5)
     return p.parse_args()
