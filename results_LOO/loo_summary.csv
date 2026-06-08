@@ -1,0 +1,11 @@
+model,variant,ood_f1_mean,ood_f1_std,mean_f1_mean,mean_f1_std,delta_ood,ttest_p,wilcoxon_p,cohens_d,gradcam_sens,gradcam_stab,n_seeds
+efficientnetv2,full,0.893,0.0,0.9177,0.0,0.0,,,0.0,0.3425,0.0715,1
+efficientnetv2,no_pretrained,0.811,0.0,0.8773,0.0,-0.082,0.22036,0.25,-0.831,0.1736,0.0543,1
+efficientnetv2,no_augment,0.896,0.0,0.936,0.0,0.003,0.18632,0.25,0.548,0.2786,0.0804,1
+efficientnetv2,no_mixup,0.902,0.0,0.94,0.0,0.009,0.07873,0.25,0.739,0.2776,0.0654,1
+efficientnetv2,no_strongaug,0.911,0.0,0.9293,0.0,0.018,0.42123,0.5,0.52,0.2854,0.0745,1
+maxvit,full,0.905,0.0,0.926,0.0,0.0,,,0.0,0.1962,0.0416,1
+maxvit,no_pretrained,0.799,0.0,0.877,0.0,-0.106,0.41304,0.5,-0.917,0.0345,0.0137,1
+maxvit,no_augment,0.925,0.0,0.943,0.0,0.02,0.42812,0.5,0.93,0.175,0.0398,1
+maxvit,no_mixup,0.913,0.0,0.932,0.0,0.008,0.77461,0.75,0.252,0.1651,0.047,1
+maxvit,no_strongaug,0.954,0.0,0.9643,0.0,0.049,0.02915,0.25,2.575,0.1867,0.0471,1
